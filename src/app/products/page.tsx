@@ -8,7 +8,8 @@ import { DataTable } from "@/components/ui/data-table";
 import { getProducts, deleteProduct, getSettings, importProductsBatch } from "@/lib/ipc";
 import { Product } from "@/types/storeos";
 import { ProductDialog } from "@/components/features/products/product-dialog";
-import { RefreshCw, Plus, Edit2, Trash2, Upload, Eye } from "lucide-react";
+import { BarcodeDialog } from "@/components/features/products/barcode-dialog";
+import { RefreshCw, Plus, Edit2, Trash2, Upload, Eye, Barcode } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -26,6 +27,9 @@ export default function ProductsPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+
+  const [barcodeDialogOpen, setBarcodeDialogOpen] = useState(false);
+  const [selectedBarcodeProduct, setSelectedBarcodeProduct] = useState<Product | null>(null);
 
   // Search and pagination states to remove lag
   const [searchTerm, setSearchTerm] = useState("");
@@ -338,6 +342,11 @@ export default function ProductsPage() {
     }
   };
 
+  const handlePrintBarcode = (product: Product) => {
+    setSelectedBarcodeProduct(product);
+    setBarcodeDialogOpen(true);
+  };
+
   const columns = [
     {
       header: "Product Name",
@@ -420,6 +429,14 @@ export default function ProductsPage() {
       header: "Actions",
       accessor: (p: Product) => (
         <div className="flex gap-1.5 justify-end">
+          <Button
+            variant="ghost"
+            onClick={() => handlePrintBarcode(p)}
+            className="w-7 h-7 p-0 text-muted-foreground hover:text-primary rounded-md"
+            title="Print Barcode Labels"
+          >
+            <Barcode className="w-3.5 h-3.5" />
+          </Button>
           <Button
             variant="ghost"
             onClick={() => handleEdit(p)}
@@ -517,6 +534,12 @@ export default function ProductsPage() {
         product={selectedProduct}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
+      />
+
+      <BarcodeDialog
+        product={selectedBarcodeProduct}
+        open={barcodeDialogOpen}
+        onOpenChange={setBarcodeDialogOpen}
       />
 
       {/* Excel / CSV Import Dialog */}

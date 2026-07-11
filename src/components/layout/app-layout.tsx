@@ -179,14 +179,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Case 1: Unauthenticated
-  if (!session) {
-    return <LoginScreen onLoginSuccess={(sess) => setSession(sess)} />;
-  }
-
-  // Case 2: Authenticated but not onboarded
+  // Case 1: Not onboarded yet -> show onboarding wizard first
   if (!isOnboarded) {
     return <OnboardingWizard onComplete={() => refetch()} />;
+  }
+
+  // Case 2: Onboarded but not authenticated -> show login screen
+  if (!session) {
+    return <LoginScreen onLoginSuccess={(sess) => setSession(sess)} />;
   }
 
   // Case 3: Check permission for active route
