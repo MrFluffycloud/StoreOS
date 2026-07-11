@@ -229,7 +229,7 @@ export const checkForUpdateInfo = async (): Promise<UpdateInfo | null> => {
       }
       return { available: false, version: "" };
     } catch (err) {
-      console.error("Updater check failed:", err);
+      console.warn("Updater check skipped (Release server not set up or offline):", err);
       return null;
     }
   } else {
