@@ -6,13 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getSettings, setSetting, resetStore, listSystemPrinters, getProducts, listInventoryMovements, getSuppliers, getUsers } from "@/lib/ipc";
+import { getSettings, setSetting, resetStore, listSystemPrinters, getProducts, listInventoryMovements, getSuppliers, getUsers, verifyLicenseKey, replicateTable } from "@/lib/ipc";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Settings, Save, Check, Printer, User, ShieldAlert, Cloud, CheckCircle2, AlertCircle, ArrowRight, Lock, Database, RefreshCw, Trash2, Settings2 } from "lucide-react";
 import { useAuth } from "@/components/layout/app-layout";
 import UserAccountsManager from "@/components/features/settings/user-accounts";
 import { printPOSReceipt } from "@/lib/printer";
-import { verifyLicenseKey } from "@/lib/syncEngine";
 import { useAlerts } from "@/components/providers/alert-provider";
 
 export default function SettingsPage() {
@@ -163,14 +162,9 @@ export default function SettingsPage() {
       const newStoreId = result.storeId || "default_store";
       setStoreId(newStoreId);
       
-      // Save credentials & generated store ID
+      // Load fallback details for state matching
       const centralUrl = "https://ggyluxjrstdjavyagepq.supabase.co";
       const centralKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdneWx1eGpyc3RkamF2eWFnZXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3NDUyMzIsImV4cCI6MjA5OTMyMTIzMn0.0mePcosWOEDdj_g5W2eZ8BGldv4TCPhYEX5Wlj_ofHM";
-
-      await setSetting("license_key", licenseKey.trim());
-      await setSetting("store_id", newStoreId);
-      await setSetting("supabase_url", centralUrl);
-      await setSetting("supabase_key", centralKey);
       setSupabaseUrl(centralUrl);
       setSupabaseKey(centralKey);
       
@@ -191,121 +185,27 @@ export default function SettingsPage() {
     setInitialReplicationComplete(false);
     
     try {
-      const centralUrl = "https://ggyluxjrstdjavyagepq.supabase.co";
-      const centralKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdneWx1eGpyc3RkamF2eWFnZXBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3NDUyMzIsImV4cCI6MjA5OTMyMTIzMn0.0mePcosWOEDdj_g5W2eZ8BGldv4TCPhYEX5Wlj_ofHM";
-
       await setSetting("supabase_sync_enabled", "true");
       setSupabaseSyncEnabled("true");
       await setSetting("last_sync_time", "1970-01-01T00:00:00.000Z");
 
-      const products = await getProducts();
-      if (products.length > 0) {
-        const endpoint = `${centralUrl}/rest/v1/products`;
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            "apikey": centralKey,
-            "Authorization": `Bearer ${centralKey}`,
-            "Content-Type": "application/json",
-            "Prefer": "resolution=merge-duplicates"
-          },
-          body: JSON.stringify(products.map(p => ({
-            id: p.id,
-            store_id: storeId,
-            name: p.name,
-            sku: p.sku,
-            barcode: p.barcode || null,
-            description: p.description || null,
-            price_cents: p.priceCents,
-            cost_cents: p.costCents,
-            category: p.category || null,
-            brand: p.brand || null,
-            image_url: p.imageUrl || null,
-            created_at: p.createdAt,
-            updated_at: p.updatedAt
-          })))
-        });
-        if (!res.ok) throw new Error(`Products sync failed: ${res.status}`);
-      }
+      // Replicate Products
+      await replicateTable("products");
       setSyncProductsStatus("success");
 
+      // Replicate Movements
       setSyncMovementsStatus("syncing");
-      const movements = await listInventoryMovements();
-      if (movements.length > 0) {
-        const endpoint = `${centralUrl}/rest/v1/inventory_movements`;
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            "apikey": centralKey,
-            "Authorization": `Bearer ${centralKey}`,
-            "Content-Type": "application/json",
-            "Prefer": "resolution=merge-duplicates"
-          },
-          body: JSON.stringify(movements.map(m => ({
-            id: m.id,
-            store_id: storeId,
-            product_id: m.productId,
-            quantity: m.quantity,
-            movement_type: m.movementType,
-            reference_type: m.referenceType || null,
-            reference_id: m.referenceId || null,
-            employee_id: m.employeeId || null,
-            timestamp: m.timestamp
-          })))
-        });
-        if (!res.ok) throw new Error(`Movements sync failed: ${res.status}`);
-      }
+      await replicateTable("inventory_movements");
       setSyncMovementsStatus("success");
 
+      // Replicate Suppliers
       setSyncSuppliersStatus("syncing");
-      const suppliers = await getSuppliers();
-      if (suppliers.length > 0) {
-        const endpoint = `${centralUrl}/rest/v1/suppliers`;
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            "apikey": centralKey,
-            "Authorization": `Bearer ${centralKey}`,
-            "Content-Type": "application/json",
-            "Prefer": "resolution=merge-duplicates"
-          },
-          body: JSON.stringify(suppliers.map(s => ({
-            id: s.id,
-            store_id: storeId,
-            name: s.name,
-            contact_name: s.contactName || null,
-            email: s.email || null,
-            phone: s.phone || null,
-            created_at: s.createdAt
-          })))
-        });
-        if (!res.ok) throw new Error(`Suppliers sync failed: ${res.status}`);
-      }
+      await replicateTable("suppliers");
       setSyncSuppliersStatus("success");
 
+      // Replicate Users
       setSyncUsersStatus("syncing");
-      const users = await getUsers();
-      if (users.length > 0) {
-        const endpoint = `${centralUrl}/rest/v1/users`;
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            "apikey": centralKey,
-            "Authorization": `Bearer ${centralKey}`,
-            "Content-Type": "application/json",
-            "Prefer": "resolution=merge-duplicates"
-          },
-          body: JSON.stringify(users.map(u => ({
-            id: u.id,
-            store_id: storeId,
-            username: u.username,
-            pin: u.pin,
-            role: u.role,
-            created_at: u.createdAt
-          })))
-        });
-        if (!res.ok) throw new Error(`Users sync failed: ${res.status}`);
-      }
+      await replicateTable("users");
       setSyncUsersStatus("success");
 
       await setSetting("last_sync_time", new Date().toISOString());

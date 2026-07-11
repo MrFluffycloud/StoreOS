@@ -257,3 +257,20 @@ export const installAndRestartUpdate = async (): Promise<void> => {
   }
 };
 
+// Security Hardening Sync IPCs
+export interface VerifyLicenseResult {
+  success: boolean;
+  storeId?: string;
+  error?: string;
+}
+
+export const verifyLicenseKey = (licenseKey: string) =>
+  safeInvoke<VerifyLicenseResult>("verify_license_key", { licenseKey }, {
+    success: true,
+    storeId: "store_mockstore",
+  });
+
+export const replicateTable = (table: string) =>
+  safeInvoke<void>("replicate_table", { table });
+
+

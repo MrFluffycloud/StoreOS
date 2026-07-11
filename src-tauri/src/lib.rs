@@ -60,6 +60,8 @@ pub fn run() {
             commands::window::resize_to_login,
             commands::window::resize_to_app,
             commands::sync::sync_database,
+            commands::sync::verify_license_key,
+            commands::sync::replicate_table,
             commands::scanner_server::approve_device,
             commands::scanner_server::disconnect_device,
             commands::scanner_server::get_local_ip,
