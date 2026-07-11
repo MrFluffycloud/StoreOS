@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>StoreOS - Mobile Barcode Scanner</title>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="apple-touch-icon" href="https://img.icons8.com/color/512/barcode-scanner.png" />
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed', err));
+        });
+      }
+    </script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background-color: #0b0f19;
+        color: #f3f4f6;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        overflow: hidden;
+      }
+      .container {
+        width: 90%;
+        max-width: 400px;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        position: relative;
+      }
+      h2 {
+        font-size: 14px;
+        margin: 0;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: #10b981;
+        font-weight: 800;
+      }
+      .card {
+        background-color: #111827;
+        border: 1px solid #1f2937;
+        border-radius: 16px;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+      }
+      input[type="text"] {
+        background-color: #1f2937;
+        border: 1px solid #374151;
+        color: #fff;
+        font-family: monospace;
+        font-size: 24px;
+        letter-spacing: 4px;
+        text-align: center;
+        padding: 12px;
+        border-radius: 8px;
+        outline: none;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      input[type="text"]:focus {
+        border-color: #10b981;
+      }
+      button {
+        background-color: #10b981;
+        color: #fff;
+        border: none;
+        padding: 12px;
+        font-weight: bold;
+        font-size: 14px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+      button:hover {
+        background-color: #059669;
+      }
+      
+      /* Futuristic Viewport Styling */
+      #scanner-view {
+        aspect-ratio: 4/3;
+        position: relative;
+        width: 100%;
+        background-color: #000;
+        border-radius: 16px;
+        border: 1px solid #1f2937;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+        overflow: hidden;
+      }
+      #reader {
+        width: 100%;
+        height: 100%;
+      }
+      #reader video {
+        object-fit: cover !important;
+        width: 100% !important;
+        height: 100% !important;
+      }
+      .scanner-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.85);
+        z-index: 2;
+      }
+      .scanner-overlay::after {
+        content: "";
+        width: 240px;
+        height: 140px;
+        border: 1px solid rgba(16, 185, 129, 0.25);
+        border-radius: 12px;
+        background-color: rgba(16, 185, 129, 0.01);
+        box-shadow: 0 0 15px rgba(16, 185, 129, 0.05);
+      }
+      .laser-line {
+        position: absolute;
+        width: 236px;
+        height: 2px;
+        background: linear-gradient(90deg, transparent, #10b981, transparent);
+        box-shadow: 0 0 12px #10b981;
+        animation: scan 2s linear infinite;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 5;
+      }
+      @keyframes scan {
+        0% { top: calc(50% - 68px); opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { top: calc(50% + 68px); opacity: 0; }
+      }
+      .corner {
+        position: absolute;
+        width: 16px;
+        height: 16px;
+        border-color: #10b981;
+        border-style: solid;
+        z-index: 6;
+      }
+      .top-left {
+        top: calc(50% - 71px);
+        left: calc(50% - 121px);
+        border-width: 3px 0 0 3px;
+        border-top-left-radius: 8px;
+      }
+      .top-right {
+        top: calc(50% - 71px);
+        right: calc(50% - 121px);
+        border-width: 3px 3px 0 0;
+        border-top-right-radius: 8px;
+      }
+      .bottom-left {
+        bottom: calc(50% - 71px);
+        left: calc(50% - 121px);
+        border-width: 0 0 3px 3px;
+        border-bottom-left-radius: 8px;
+      }
+      .bottom-right {
+        bottom: calc(50% - 71px);
+        right: calc(50% - 121px);
+        border-width: 0 3px 3px 0;
+        border-bottom-right-radius: 8px;
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 6px;
+        background-color: #ef4444;
+      }
+      .status-dot.pending {
+        background-color: #f59e0b;
+        animation: pulse 1.5s infinite;
+      }
+      .status-dot.active {
+        background-color: #10b981;
+      }
+      .status-bar {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        color: #9ca3af;
+      }
+      .toast {
+        position: fixed;
+        bottom: 30px;
+        background-color: #10b981;
+        color: #fff;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: bold;
+        transform: translateY(100px);
+        transition: transform 0.3s ease;
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        z-index: 100;
+      }
+      .toast.show {
+        transform: translateY(0);
+      }
+      @keyframes pulse {
+        0% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.2); opacity: 0.5; }
+        100% { transform: scale(1); opacity: 1; }
+      }
+
+      /* Confirm Overlay Dialog */
+      .confirm-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(11, 15, 25, 0.9);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 50;
+        padding: 16px;
+        box-sizing: border-box;
+      }
+      .confirm-content {
+        background-color: #111827;
+        border: 1px solid #10b981;
+        border-radius: 16px;
+        padding: 20px;
+        width: 100%;
+        max-width: 320px;
+        box-shadow: 0 0 20px rgba(16, 185, 129, 0.15);
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .confirm-title {
+        font-size: 14px;
+        font-weight: bold;
+        color: #fff;
+        margin: 0;
+        text-align: left;
+      }
+      .confirm-meta {
+        font-size: 10px;
+        color: #9ca3af;
+        font-family: monospace;
+        text-align: left;
+      }
+      .confirm-price {
+        font-size: 16px;
+        font-weight: bold;
+        color: #10b981;
+        font-family: monospace;
+        text-align: left;
+      }
+      .confirm-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 6px;
+      }
+      .confirm-actions button {
+        flex: 1;
+        padding: 10px;
+        font-size: 12px;
+      }
+      .btn-cancel {
+        background-color: #1f2937;
+        border: 1px solid #374151;
+        color: #9ca3af;
+      }
+      .btn-cancel:hover {
+        background-color: #374151;
+        color: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <!-- PWA Install Popup Banner -->
+      <div id="pwa-banner" class="card" style="display: none; border-color: #10b981; flex-direction: row; align-items: center; justify-content: space-between; padding: 10px 16px;">
+        <div style="text-align: left; display: flex; flex-direction: column; gap: 2px;">
+          <span style="font-weight: bold; font-size: 11px; color: #fff;">Install Scanner App</span>
+          <span style="font-size: 9px; color: #9ca3af;">Add to homescreen for fullscreen view</span>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <button class="btn-cancel" onclick="dismissPwa()" style="padding: 6px 12px; font-size: 10px; border-radius: 6px; height: 28px;">Later</button>
+          <button onclick="installPwa()" style="padding: 6px 12px; font-size: 10px; border-radius: 6px; height: 28px; background-color: #10b981; color: white;">Install</button>
+        </div>
+      </div>
+
+      <h2>StoreOS Mobile Scan</h2>
+      
+      <!-- Pairing Screen -->
+      <div id="pairing-card" class="card">
+        <div style="font-size: 13px; color: #9ca3af;">Enter the 4-digit pairing PIN shown on the StoreOS desktop app:</div>
+        <input type="text" id="pin-input" maxlength="4" placeholder="0000" />
+        <button id="connect-btn" onclick="requestConnection()">Connect to POS</button>
+      </div>
+
+      <!-- Waiting Screen -->
+      <div id="waiting-card" class="card" style="display: none;">
+        <div class="status-bar">
+          <span class="status-dot pending"></span>
+          <span>Waiting for desktop approval...</span>
+        </div>
+        <div style="font-size: 12px; color: #9ca3af;">Please look at your StoreOS desktop screen and click <strong>Allow Connection</strong>.</div>
+      </div>
+
+      <!-- Scanner Screen -->
+      <div id="scanner-view" style="display: none;">
+        <div id="reader"></div>
+        <!-- Target Overlay styling -->
+        <div class="scanner-overlay">
+          <div class="laser-line"></div>
+          <div class="corner top-left"></div>
+          <div class="corner top-right"></div>
+          <div class="corner bottom-left"></div>
+          <div class="corner bottom-right"></div>
+        </div>
+        <div class="status-bar" style="position: absolute; bottom: 16px; left: 0; right: 0; z-index: 10; background: rgba(17, 24, 39, 0.85); backdrop-filter: blur(4px); padding: 8px 14px; border-radius: 20px; width: fit-content; margin: 0 auto; border: 1px solid rgba(255, 255, 255, 0.05); font-weight: bold; letter-spacing: 0.5px;">
+          <span class="status-dot active"></span>
+          <span id="status">Active and scanning...</span>
+        </div>
+      </div>
+
+      <!-- Confirm Dialog Overlay -->
+      <div id="confirm-overlay" class="confirm-overlay" style="display: none;">
+        <div class="confirm-content">
+          <!-- Product image container -->
+          <div id="confirm-image-container" style="display: none; justify-content: center; margin-bottom: 6px;">
+            <img id="confirm-image" src="" alt="Product Image" style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 1px solid #374151; background: #fff;" />
+          </div>
+
+          <h3 class="confirm-title" id="confirm-name">Product Name</h3>
+          <div class="confirm-meta" id="confirm-sku">SKU: HK-CIS-12</div>
+          <div class="confirm-price" id="confirm-price">$0.00</div>
+
+          <!-- Quantity adjustments inside confirm overlay -->
+          <div style="display: flex; align-items: center; justify-content: space-between; margin: 6px 0; padding: 6px 0; border-top: 1px solid #1f2937; border-bottom: 1px solid #1f2937;">
+            <span style="font-size: 10px; color: #9ca3af; font-weight: bold; text-transform: uppercase; tracking-wider: 0.5px;">Quantity</span>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <button class="btn-cancel" onclick="adjustConfirmQty(-1)" style="width: 28px; height: 28px; padding: 0; font-size: 14px; display: flex; align-items: center; justify-content: center; border-radius: 6px;">-</button>
+              <span id="confirm-qty" style="font-family: monospace; font-size: 14px; font-weight: bold; color: #fff; width: 24px; text-align: center;">1</span>
+              <button class="btn-cancel" onclick="adjustConfirmQty(1)" style="width: 28px; height: 28px; padding: 0; font-size: 14px; display: flex; align-items: center; justify-content: center; border-radius: 6px;">+</button>
+            </div>
+          </div>
+
+          <div class="confirm-actions">
+            <button class="btn-cancel" onclick="cancelScan()">Cancel</button>
+            <button onclick="confirmScan()" style="background-color: #10b981; color: white;">Add to Cart</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="toast" id="toast">Barcode Sent!</div>
+
+    <script>
+      const pinInput = document.getElementById("pin-input");
+      const pairingCard = document.getElementById("pairing-card");
+      const waitingCard = document.getElementById("waiting-card");
+      const scannerView = document.getElementById("scanner-view");
+      const readerDiv = document.getElementById("reader");
+      const statusDiv = document.getElementById("status");
+      const toast = document.getElementById("toast");
+
+      const confirmOverlay = document.getElementById("confirm-overlay");
+      const confirmName = document.getElementById("confirm-name");
+      const confirmSku = document.getElementById("confirm-sku");
+      const confirmPrice = document.getElementById("confirm-price");
+      const confirmQtySpan = document.getElementById("confirm-qty");
+      const confirmImageContainer = document.getElementById("confirm-image-container");
+      const confirmImage = document.getElementById("confirm-image");
+
+      const pwaBanner = document.getElementById("pwa-banner");
+
+      let pollInterval = null;
+      let html5QrCode = null;
+      let catalogProducts = [];
+      let pendingBarcode = null;
+      let lastScanTime = 0;
+      let selectedQty = 1;
+      let deferredPrompt = null;
+
+      // Listen for PWA install requests
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        pwaBanner.style.display = "flex";
+      });
+
+      function dismissPwa() {
+        pwaBanner.style.display = "none";
+      }
+
+      function installPwa() {
+        if (deferredPrompt) {
+          deferredPrompt.prompt();
+          deferredPrompt.userChoice.then((choiceResult) => {
+            if (choiceResult.outcome === 'accepted') {
+              console.log('App installed successfully');
+            }
+            deferredPrompt = null;
+            pwaBanner.style.display = "none";
+          });
+        }
+      }
+
+      // Auto-fill pin from query parameters if present
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlPin = urlParams.get("pin");
+      if (urlPin && urlPin.length === 4) {
+        pinInput.value = urlPin;
+        requestConnection();
+      }
+
+      function showToast(message) {
+        toast.innerText = message;
+        toast.classList.add("show");
+        if (navigator.vibrate) {
+          navigator.vibrate(100);
+        }
+        setTimeout(() => toast.classList.remove("show"), 1500);
+      }
+
+      async function requestConnection() {
+        const pin = pinInput.value.trim();
+        if (pin.length !== 4) {
+          alert("Please enter a valid 4-digit PIN.");
+          return;
+        }
+
+        pairingCard.style.display = "none";
+        waitingCard.style.display = "flex";
+
+        try {
+          // Send request to register device pairing
+          await fetch(`/api/connect?pin=${pin}`);
+          startPolling();
+        } catch (err) {
+          console.error(err);
+          alert("Could not connect to server. Ensure USB debugging / tethering is turned on.");
+          pairingCard.style.display = "flex";
+          waitingCard.style.display = "none";
+        }
+      }
+
+      function startPolling() {
+        if (pollInterval) clearInterval(pollInterval);
+        pollInterval = setInterval(checkStatus, 1500);
+      }
+
+      async function checkStatus() {
+        try {
+          const res = await fetch("/api/status");
+          const data = await res.json();
+
+          if (data.status === "approved") {
+            clearInterval(pollInterval);
+            catalogProducts = data.products || [];
+            initiateCameraScanner();
+          }
+        } catch (err) {
+          console.error("Status polling failed", err);
+        }
+      }
+
+      function initiateCameraScanner() {
+        waitingCard.style.display = "none";
+        scannerView.style.display = "block";
+        readerDiv.style.display = "block";
+
+        html5QrCode = new Html5Qrcode("reader");
+        const config = { fps: 15, qrbox: { width: 220, height: 120 } };
+
+        html5QrCode.start(
+          { facingMode: "environment" },
+          config,
+          (decodedText) => {
+            handleDecodedBarcode(decodedText);
+          },
+          (errorMessage) => {}
+        ).then(() => {
+          statusDiv.innerText = "Active and scanning...";
+        }).catch(err => {
+          console.error(err);
+          statusDiv.innerText = "Camera access denied.";
+        });
+      }
+
+      function handleDecodedBarcode(barcode) {
+        const now = Date.now();
+        if (now - lastScanTime < 2000) return;
+        if (pendingBarcode) return;
+
+        // Match barcode in synced catalog
+        const match = catalogProducts.find(p => 
+          (p.barcode && p.barcode.toLowerCase() === barcode.toLowerCase()) || 
+          p.sku.toLowerCase() === barcode.toLowerCase()
+        );
+
+        if (match) {
+          html5QrCode.pause();
+          pendingBarcode = barcode;
+          selectedQty = 1;
+          confirmQtySpan.innerText = selectedQty;
+          
+          // Image loading
+          if (match.imageUrl) {
+            confirmImage.src = match.imageUrl;
+            confirmImageContainer.style.display = "flex";
+          } else {
+            confirmImageContainer.style.display = "none";
+          }
+
+          confirmName.innerText = match.name;
+          confirmSku.innerText = "SKU: " + match.sku;
+          confirmPrice.innerText = "$" + (match.priceCents / 100).toFixed(2);
+          confirmOverlay.style.display = "flex";
+        } else {
+          showToast("Product not matched: " + barcode);
+        }
+      }
+
+      function adjustConfirmQty(diff) {
+        selectedQty = Math.max(1, selectedQty + diff);
+        confirmQtySpan.innerText = selectedQty;
+      }
+
+      function cancelScan() {
+        confirmOverlay.style.display = "none";
+        pendingBarcode = null;
+        lastScanTime = Date.now();
+        html5QrCode.resume();
+      }
+
+      async function confirmScan() {
+        if (!pendingBarcode) return;
+        confirmOverlay.style.display = "none";
+        const barcode = pendingBarcode;
+        pendingBarcode = null;
+
+        try {
+          statusDiv.innerText = "Transmitting...";
+          const res = await fetch("/api/scan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ barcode, qty: selectedQty })
+          });
+          
+          if (res.ok) {
+            showToast("Added to Cart!");
+          } else {
+            showToast("Sync failed.");
+          }
+        } catch (err) {
+          console.error(err);
+          showToast("Connection lost.");
+        }
+
+        lastScanTime = Date.now();
+        statusDiv.innerText = "Active and scanning...";
+        html5QrCode.resume();
+      }
+    </script>
+  </body>
+</html>
