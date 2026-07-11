@@ -273,4 +273,18 @@ export const verifyLicenseKey = (licenseKey: string) =>
 export const replicateTable = (table: string) =>
   safeInvoke<void>("replicate_table", { table });
 
+export const getAppVersion = async (): Promise<string> => {
+  if (isTauri()) {
+    try {
+      const { getVersion } = await import("@tauri-apps/api/app");
+      return await getVersion();
+    } catch (e) {
+      console.error("Failed to get Tauri app version", e);
+      return "0.1.4";
+    }
+  }
+  return "0.1.4";
+};
+
+
 

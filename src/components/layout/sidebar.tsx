@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { useAuth, hasPermission } from "./app-layout";
 import { useQuery } from "@tanstack/react-query";
-import { getSettings } from "@/lib/ipc";
+import { getSettings, getAppVersion } from "@/lib/ipc";
 import { Logo } from "@/components/ui/logo";
 
 const navItems = [
@@ -48,6 +48,11 @@ export default function Sidebar() {
 
   const isPremium = dbSettings.find(s => s.key === "license_key")?.value ? true : false;
 
+  const { data: appVersion = "0.1.4" } = useQuery({
+    queryKey: ["appVersion"],
+    queryFn: getAppVersion,
+  });
+
   // Filter navigation links dynamically based on the user's role permissions
   const allowedItems = navItems.filter((item) => hasPermission(role, item.href));
 
@@ -65,7 +70,7 @@ export default function Sidebar() {
               </span>
             )}
           </div>
-          <span className="text-[10px] text-muted-foreground mt-0.5 font-mono">v0.1.0-alpha</span>
+          <span className="text-[10px] text-muted-foreground mt-0.5 font-mono">v{appVersion}</span>
         </div>
       </div>
 
