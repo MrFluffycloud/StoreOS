@@ -42,6 +42,6 @@ jobs:
           tagName: v__VERSION__ # tauri-action replaces this with version from tauri.conf.json
           releaseName: "StoreOS v__VERSION__"
           releaseBody: "Automated StoreOS release."
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

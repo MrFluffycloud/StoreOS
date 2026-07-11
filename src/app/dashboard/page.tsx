@@ -73,6 +73,9 @@ export default function DashboardPage() {
     }
   };
 
+  useEffect(() => {
+    runUpdateCheck(false);
+  }, []);
 
 
   useEffect(() => {
