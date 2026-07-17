@@ -14,6 +14,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+} from "@/components/ui/context-menu";
 import { useAuth } from "@/components/layout/app-layout";
 import { useAlerts } from "@/components/providers/alert-provider";
 import { toast } from "sonner";
@@ -551,6 +558,34 @@ export default function ProductsPage() {
               columns={columns}
               data={displayedProducts}
               emptyMessage="No matching products found in the catalog."
+              renderRow={(product, index, defaultRow) => (
+                <ContextMenu key={product.id}>
+                  <ContextMenuTrigger render={defaultRow} />
+                  <ContextMenuContent className="min-w-44 border border-border/80 bg-popover text-popover-foreground rounded-lg p-1 shadow-md">
+                    <ContextMenuItem onClick={() => handleEdit(product)} className="flex items-center gap-2 px-2.5 py-1.5 text-xs rounded hover:bg-accent cursor-pointer">
+                      {isReadOnly ? <Eye className="w-3.5 h-3.5 opacity-70" /> : <Edit2 className="w-3.5 h-3.5 opacity-70" />}
+                      <span>{isReadOnly ? "View Details" : "Edit Product"}</span>
+                    </ContextMenuItem>
+                    <ContextMenuItem onClick={() => handlePrintBarcode(product)} className="flex items-center gap-2 px-2.5 py-1.5 text-xs rounded hover:bg-accent cursor-pointer">
+                      <Barcode className="w-3.5 h-3.5 opacity-70" />
+                      <span>Print Barcode</span>
+                    </ContextMenuItem>
+                    {!isReadOnly && (
+                      <>
+                        <ContextMenuSeparator className="my-1 border-t border-border/40" />
+                        <ContextMenuItem 
+                          variant="destructive"
+                          onClick={() => handleDelete(product.id)}
+                          className="flex items-center gap-2 px-2.5 py-1.5 text-xs rounded text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Delete Product</span>
+                        </ContextMenuItem>
+                      </>
+                    )}
+                  </ContextMenuContent>
+                </ContextMenu>
+              )}
             />
             
             <PaginationControls

@@ -20,9 +20,10 @@ interface DataTableProps<T> {
   columns: Column<T>[];
   data: T[];
   emptyMessage?: string;
+  renderRow?: (item: T, index: number, defaultRow: React.ReactElement) => React.ReactNode;
 }
 
-export function DataTable<T>({ columns, data, emptyMessage = "No records found." }: DataTableProps<T>) {
+export function DataTable<T>({ columns, data, emptyMessage = "No records found.", renderRow }: DataTableProps<T>) {
   const [sortIndex, setSortIndex] = useState<number | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc" | null>(null);
 
@@ -111,15 +112,18 @@ export function DataTable<T>({ columns, data, emptyMessage = "No records found."
               </TableCell>
             </TableRow>
           ) : (
-            sortedData.map((item, index) => (
-              <TableRow key={index} className="hover:bg-muted/20 border-b border-border/55 last:border-b-0">
-                {columns.map((column, i) => (
-                  <TableCell key={i} className={column.className}>
-                    {column.accessor(item)}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))
+            sortedData.map((item, index) => {
+              const defaultRow: React.ReactElement = (
+                <TableRow key={index} className="hover:bg-muted/20 border-b border-border/55 last:border-b-0">
+                  {columns.map((column, i) => (
+                    <TableCell key={i} className={column.className}>
+                      {column.accessor(item)}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              );
+              return renderRow ? renderRow(item, index, defaultRow) : defaultRow;
+            })
           )}
         </TableBody>
       </Table>

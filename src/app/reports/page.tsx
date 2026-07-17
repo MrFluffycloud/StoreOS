@@ -135,6 +135,59 @@ export default function ReportsPage() {
 
   // 3. Daily Sales Bar Chart data
   const getDailyData = () => {
+    if (dateRange === "today") {
+      const hoursMap = new Map<number, number>();
+      
+      // Default business hours: 8 AM to 8 PM
+      let startHour = 8;
+      let endHour = 20;
+      
+      // Expand range based on actual transaction hours if any
+      filteredMovements.forEach((m) => {
+        if (m.movementType !== "Sale" && m.movementType !== "SalesReturn") return;
+        const dateObj = new Date(m.timestamp);
+        const hour = dateObj.getHours();
+        if (hour < startHour) startHour = hour;
+        if (hour > endHour) endHour = hour;
+      });
+      
+      // Pre-fill determined hours
+      for (let h = startHour; h <= endHour; h++) {
+        hoursMap.set(h, 0);
+      }
+      
+      // Group movements by hour
+      filteredMovements.forEach((m) => {
+        if (m.movementType !== "Sale" && m.movementType !== "SalesReturn") return;
+        const prod = productMap.get(m.productId);
+        if (!prod) return;
+        
+        const dateObj = new Date(m.timestamp);
+        const hour = dateObj.getHours();
+        
+        const amt = Math.abs(m.quantity) * prod.priceCents;
+        const current = hoursMap.get(hour) || 0;
+        if (m.movementType === "Sale") {
+          hoursMap.set(hour, current + amt);
+        } else {
+          hoursMap.set(hour, current - amt);
+        }
+      });
+      
+      return Array.from(hoursMap.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([hour, val]) => {
+          const ampm = hour >= 12 ? "PM" : "AM";
+          const displayHour = hour % 12 === 0 ? 12 : hour % 12;
+          const label = `${displayHour} ${ampm}`;
+          return {
+            date: label,
+            sales: Math.max(0, val / 100),
+          };
+        });
+    }
+
+    // Otherwise, calculate daily data
     const daysMap = new Map<number, number>();
 
     // Group movements by date (start-of-day timestamp)
@@ -158,7 +211,7 @@ export default function ReportsPage() {
 
     // Pre-fill missing dates for the chosen range so we don't have gaps
     if (dateRange !== "all") {
-      const limit = dateRange === "30days" ? 30 : dateRange === "today" ? 1 : 7;
+      const limit = dateRange === "30days" ? 30 : 7;
       for (let i = limit - 1; i >= 0; i--) {
         const d = new Date();
         d.setDate(d.getDate() - i);
