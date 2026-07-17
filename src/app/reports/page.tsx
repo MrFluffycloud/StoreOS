@@ -26,6 +26,8 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Calendar as DateCalendar } from "@/components/ui/calendar";
 
 const chartConfig = {
   sales: {
@@ -34,7 +36,7 @@ const chartConfig = {
   },
 } satisfies ChartConfig;
 
-type DateRange = "today" | "7days" | "30days" | "all";
+type DateRange = "today" | "7days" | "30days" | "all" | "custom";
 
 export default function ReportsPage() {
   const { session } = useAuth();
@@ -42,6 +44,21 @@ export default function ReportsPage() {
   const { showAlert } = useAlerts();
 
   const [dateRange, setDateRange] = useState<DateRange>("7days");
+  const [customRange, setCustomRange] = useState<{
+    from: Date | undefined;
+    to: Date | undefined;
+  }>({
+    from: undefined,
+    to: undefined,
+  });
+
+  const formatRange = (range: { from: Date | undefined; to: Date | undefined }) => {
+    if (!range.from) return "Select Dates";
+    const fromStr = range.from.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
+    if (!range.to) return fromStr;
+    const toStr = range.to.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" });
+    return `${fromStr} - ${toStr}`;
+  };
 
   const { data: dbSettings = [] } = useQuery({
     queryKey: ["settings"],
@@ -98,6 +115,14 @@ export default function ReportsPage() {
     if (dateRange === "30days") {
       const threshold = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       return date >= threshold;
+    }
+    if (dateRange === "custom") {
+      if (!customRange.from) return false;
+      const start = new Date(customRange.from);
+      start.setHours(0, 0, 0, 0);
+      const end = customRange.to ? new Date(customRange.to) : new Date(customRange.from);
+      end.setHours(23, 59, 59, 999);
+      return date >= start && date <= end;
     }
     return true; // All time
   });
@@ -210,7 +235,7 @@ export default function ReportsPage() {
     });
 
     // Pre-fill missing dates for the chosen range so we don't have gaps
-    if (dateRange !== "all") {
+    if (dateRange !== "all" && dateRange !== "custom") {
       const limit = dateRange === "30days" ? 30 : 7;
       for (let i = limit - 1; i >= 0; i--) {
         const d = new Date();
@@ -220,6 +245,26 @@ export default function ReportsPage() {
         if (!daysMap.has(dayTimestamp)) {
           daysMap.set(dayTimestamp, 0);
         }
+      }
+    } else if (dateRange === "custom") {
+      // For "custom", pre-fill all dates within the picked range
+      const start = customRange.from ? new Date(customRange.from) : new Date();
+      const end = customRange.to ? new Date(customRange.to) : new Date(start.getTime());
+      
+      start.setHours(0, 0, 0, 0);
+      end.setHours(0, 0, 0, 0);
+      
+      const temp = new Date(start.getTime());
+      const dayLimit = 365; // Safe maximum
+      let dayCount = 0;
+      
+      while (temp <= end && dayCount < dayLimit) {
+        const dayTimestamp = temp.getTime();
+        if (!daysMap.has(dayTimestamp)) {
+          daysMap.set(dayTimestamp, 0);
+        }
+        temp.setDate(temp.getDate() + 1);
+        dayCount++;
       }
     } else {
       // For "all" time, pre-fill all intermediate empty dates from oldest movement to today
@@ -423,39 +468,87 @@ export default function ReportsPage() {
             <Calendar className="w-4 h-4 text-primary" />
             <span className="text-xs font-semibold text-foreground">Reporting Range</span>
           </div>
-          <div className="flex border border-border rounded overflow-hidden text-[10px] font-semibold bg-background">
-            <button
-              onClick={() => setDateRange("today")}
-              className={`py-1.5 px-3 border-r border-border hover:bg-muted/40 transition-colors ${
-                dateRange === "today" ? "bg-primary text-primary-foreground hover:bg-primary" : ""
-              }`}
-            >
-              Today
-            </button>
-            <button
-              onClick={() => setDateRange("7days")}
-              className={`py-1.5 px-3 border-r border-border hover:bg-muted/40 transition-colors ${
-                dateRange === "7days" ? "bg-primary text-primary-foreground hover:bg-primary" : ""
-              }`}
-            >
-              7 Days
-            </button>
-            <button
-              onClick={() => setDateRange("30days")}
-              className={`py-1.5 px-3 border-r border-border hover:bg-muted/40 transition-colors ${
-                dateRange === "30days" ? "bg-primary text-primary-foreground hover:bg-primary" : ""
-              }`}
-            >
-              30 Days
-            </button>
-            <button
-              onClick={() => setDateRange("all")}
-              className={`py-1.5 px-3 hover:bg-muted/40 transition-colors ${
-                dateRange === "all" ? "bg-primary text-primary-foreground hover:bg-primary" : ""
-              }`}
-            >
-              All Time
-            </button>
+          <div className="flex items-center gap-3">
+            {/* Custom Range Display/Picker — only shown when custom is selected */}
+            {dateRange === "custom" && (
+              <Popover>
+                <PopoverTrigger render={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8.5 text-xs font-mono font-medium flex items-center gap-2 px-3 border-border/80 bg-background hover:bg-muted/40 transition-colors"
+                  >
+                    <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span>{formatRange(customRange)}</span>
+                  </Button>
+                }>
+                </PopoverTrigger>
+                <PopoverContent className="p-0 border border-border/80 bg-popover rounded-lg shadow-xl z-50 overflow-hidden">
+                  <DateCalendar
+                    mode="range"
+                    selected={customRange}
+                    onSelect={(range: any) => {
+                      if (range) {
+                        setCustomRange(range);
+                      }
+                    }}
+                    numberOfMonths={2}
+                  />
+                </PopoverContent>
+              </Popover>
+            )}
+
+            <div className="flex border border-border rounded overflow-hidden text-[10px] font-semibold bg-background">
+              <button
+                onClick={() => setDateRange("today")}
+                className={`py-1.5 px-3 border-r border-border hover:bg-muted/40 transition-colors ${
+                  dateRange === "today" ? "bg-primary text-primary-foreground hover:bg-primary" : ""
+                }`}
+              >
+                Today
+              </button>
+              <button
+                onClick={() => setDateRange("7days")}
+                className={`py-1.5 px-3 border-r border-border hover:bg-muted/40 transition-colors ${
+                  dateRange === "7days" ? "bg-primary text-primary-foreground hover:bg-primary" : ""
+                }`}
+              >
+                7 Days
+              </button>
+              <button
+                onClick={() => setDateRange("30days")}
+                className={`py-1.5 px-3 border-r border-border hover:bg-muted/40 transition-colors ${
+                  dateRange === "30days" ? "bg-primary text-primary-foreground hover:bg-primary" : ""
+                }`}
+              >
+                30 Days
+              </button>
+              <button
+                onClick={() => setDateRange("all")}
+                className={`py-1.5 px-3 border-r border-border hover:bg-muted/40 transition-colors ${
+                  dateRange === "all" ? "bg-primary text-primary-foreground hover:bg-primary" : ""
+                }`}
+              >
+                All Time
+              </button>
+              <button
+                onClick={() => {
+                  setDateRange("custom");
+                  if (!customRange.from) {
+                    // Set default range to last 7 days when clicked
+                    const to = new Date();
+                    const from = new Date();
+                    from.setDate(from.getDate() - 6);
+                    setCustomRange({ from, to });
+                  }
+                }}
+                className={`py-1.5 px-3 hover:bg-muted/40 transition-colors ${
+                  dateRange === "custom" ? "bg-primary text-primary-foreground hover:bg-primary" : ""
+                }`}
+              >
+                Custom
+              </button>
+            </div>
           </div>
         </div>
 
