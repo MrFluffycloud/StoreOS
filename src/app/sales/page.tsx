@@ -1555,11 +1555,15 @@ export default function SalesPage() {
                     className="flex-1 text-xs h-8.5 animate-pulse bg-primary text-primary-foreground font-bold hover:bg-primary/95 border-none"
                     onClick={() => {
                       if (currentReceipt) {
+                        toast.loading("Printing Receipt...", {
+                          id: "pos-receipt-print-toast",
+                          description: `Sending print job for "${currentReceipt.receiptId}"...`,
+                        });
                         setPrintStatus("spooling");
                         setPrintProgress(15);
                         const t1 = setTimeout(() => setPrintProgress(45), 150);
                         const t2 = setTimeout(() => setPrintProgress(75), 400);
-
+ 
                         printPOSReceipt(
                           {
                             receiptId: currentReceipt.receiptId,
@@ -1597,6 +1601,10 @@ export default function SalesPage() {
                             setPrintProgress(100);
                             setPrintStatus("success");
                             setTimeout(() => setPrintStatus(null), 1000);
+                            toast.success("Receipt Printed", {
+                              id: "pos-receipt-print-toast",
+                              description: `Successfully printed receipt "${currentReceipt.receiptId}".`,
+                            });
                           })
                           .catch((err) => {
                             clearTimeout(t1);
@@ -1604,6 +1612,10 @@ export default function SalesPage() {
                             setPrintStatus("error");
                             setTimeout(() => setPrintStatus(null), 2000);
                             console.error(err);
+                            toast.error("Printing Failed", {
+                              id: "pos-receipt-print-toast",
+                              description: err.message || "Could not print POS receipt.",
+                            });
                           });
                       }
                     }}

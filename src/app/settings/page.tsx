@@ -13,6 +13,7 @@ import { useAuth } from "@/components/layout/app-layout";
 import UserAccountsManager from "@/components/features/settings/user-accounts";
 import { printPOSReceipt } from "@/lib/printer";
 import { useAlerts } from "@/components/providers/alert-provider";
+import { toast } from "sonner";
 
 export default function SettingsPage() {
   const queryClient = useQueryClient();
@@ -26,6 +27,8 @@ export default function SettingsPage() {
     queryKey: ["settings"],
     queryFn: getSettings,
   });
+
+  const isSyncActivated = dbSettings.some(s => s.key === "license_key" && s.value && s.value.trim().length > 0);
 
   // Shop settings states
   const [storeName, setStoreName] = useState("");
@@ -255,8 +258,17 @@ export default function SettingsPage() {
       setIdFormatChanged(false);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-    } catch (err) {
+      
+      toast.success("Settings Saved", {
+        description: `Successfully updated the ${
+          activeTab === "shop" ? "General Store" : activeTab === "receipt" ? "Receipt Printer" : "Cloud Sync"
+        } configuration.`,
+      });
+    } catch (err: any) {
       console.error(err);
+      toast.error("Failed to Save Settings", {
+        description: err.message || "An unexpected error occurred while writing settings.",
+      });
     } finally {
       setSaving(false);
     }
@@ -875,64 +887,108 @@ export default function SettingsPage() {
           <UserAccountsManager />
         ) : activeTab === "sync" ? (
           <div className="max-w-2xl space-y-6 select-none">
-            {supabaseSyncEnabled === "true" ? (
+            {isSyncActivated ? (
               /* Connected Dashboard View */
               <div className="space-y-6">
-                <Card className="border border-emerald-500/30 bg-emerald-500/5 shadow-sm">
+                <Card className={`border shadow-sm transition-all ${
+                  supabaseSyncEnabled === "true" 
+                    ? "border-emerald-500/30 bg-emerald-500/5" 
+                    : "border-zinc-700/50 bg-zinc-800/10"
+                }`}>
                   <CardHeader className="pb-4">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
-                        <Cloud className="w-4 h-4 text-emerald-500 animate-pulse" /> Cloud Sync Active
+                      <CardTitle className={`text-sm font-semibold uppercase tracking-wider flex items-center gap-2 ${
+                        supabaseSyncEnabled === "true" ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-500 dark:text-zinc-400"
+                      }`}>
+                        <Cloud className={`w-4 h-4 ${
+                          supabaseSyncEnabled === "true" ? "text-emerald-500 animate-pulse" : "text-zinc-500"
+                        }`} /> 
+                        {supabaseSyncEnabled === "true" ? "Cloud Sync Active" : "Cloud Sync Paused"}
                       </CardTitle>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold tracking-wide bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                        🟢 Connected
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold tracking-wide ${
+                        supabaseSyncEnabled === "true" 
+                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" 
+                          : "bg-zinc-500/10 text-zinc-500 dark:text-zinc-400"
+                      }`}>
+                        {supabaseSyncEnabled === "true" ? "🟢 Connected" : "⏸️ Paused"}
                       </span>
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">
-                      StoreOS is connected to your cloud database. Local checkouts, products, and movements are synced automatically in real-time.
+                      {supabaseSyncEnabled === "true" 
+                        ? "StoreOS is connected to your cloud database. Local checkouts, products, and movements are synced automatically in real-time."
+                        : "Cloud replication is paused. Local data changes are stored safely on this computer but will not replicate to the cloud."}
                     </div>
                   </CardHeader>
                   <CardContent className="pt-2 pb-6 space-y-4">
-                    <div className="space-y-2 border-t border-border/40 pt-4 text-xs">
-                      <div className="flex justify-between py-1">
+                    <div className="space-y-2.5 border-t border-border/40 pt-4 text-xs">
+                      <div className="flex justify-between items-center py-1">
                         <span className="text-muted-foreground font-medium">License Key:</span>
                         <span className="font-mono text-[11px] text-foreground font-semibold">
                           SOS-••••-••••-{licenseKey ? licenseKey.slice(-4) : "8162"}
                         </span>
                       </div>
-                      <div className="flex justify-between py-1 border-t border-border/20">
+                      <div className="flex justify-between items-center py-1 border-t border-border/20">
                         <span className="text-muted-foreground font-medium">Store ID / Tenant:</span>
                         <span className="font-mono text-[11px] text-foreground font-semibold">{storeId || "default_store"}</span>
                       </div>
-                      <div className="flex justify-between py-1 border-t border-border/20">
+                      <div className="flex justify-between items-center py-1 border-t border-border/20">
                         <span className="text-muted-foreground font-medium">Status:</span>
                         <span className="font-semibold text-emerald-600 dark:text-emerald-400">Premium Active</span>
                       </div>
+                      
+                      {/* Interactive toggle switch for pausing/resuming sync */}
+                      <div className="flex justify-between items-center py-2.5 border-t border-border/20">
+                        <span className="text-muted-foreground font-medium">Automatic Cloud Syncing:</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const newVal = supabaseSyncEnabled === "true" ? "false" : "true";
+                              await setSetting("supabase_sync_enabled", newVal);
+                              setSupabaseSyncEnabled(newVal);
+                              queryClient.invalidateQueries({ queryKey: ["settings"] });
+                            }}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              supabaseSyncEnabled === "true" ? "bg-emerald-500" : "bg-zinc-700"
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                                supabaseSyncEnabled === "true" ? "translate-x-5" : "translate-x-0"
+                              }`}
+                            />
+                          </button>
+                          <span className={`text-[11px] font-semibold ${supabaseSyncEnabled === "true" ? "text-emerald-500" : "text-muted-foreground"}`}>
+                            {supabaseSyncEnabled === "true" ? "Enabled" : "Disabled (Paused)"}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-
+ 
                     <div className="flex items-center gap-3 pt-4 border-t border-border/40">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8.5 text-xs font-semibold flex items-center gap-1.5"
-                        onClick={async () => {
-                          // Allow reconfiguring connection
-                          setSyncStep(1);
-                          setSupabaseSyncEnabled("false");
-                        }}
-                      >
-                        <Settings2 className="w-3.5 h-3.5" /> Reconfigure
-                      </Button>
-
                       <Button
                         variant="destructive"
                         size="sm"
                         className="h-8.5 text-xs font-semibold flex items-center gap-1.5"
                         onClick={async () => {
-                          const confirmSync = await showConfirm("Are you sure you want to disconnect Cloud Sync? Local changes will no longer replicate to Supabase.", "Disconnect Cloud Sync");
+                          const confirmSync = await showConfirm(
+                            "Are you sure you want to disconnect Cloud Sync? All cloud credentials will be removed and local changes will no longer replicate.",
+                            "Disconnect Cloud Sync"
+                          );
                           if (confirmSync) {
+                            await setSetting("license_key", "");
+                            await setSetting("store_id", "");
+                            await setSetting("supabase_url", "");
+                            await setSetting("supabase_key", "");
                             await setSetting("supabase_sync_enabled", "false");
+                            
+                            setLicenseKey("");
+                            setStoreId("");
+                            setSupabaseUrl("");
+                            setSupabaseKey("");
                             setSupabaseSyncEnabled("false");
+                            setSyncStep(1);
+                            
                             refetch();
                             queryClient.invalidateQueries({ queryKey: ["settings"] });
                           }

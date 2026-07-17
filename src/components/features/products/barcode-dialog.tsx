@@ -15,6 +15,7 @@ import { Product } from "@/types/storeos";
 import { getSettings, listSystemPrinters, printReceiptSilent } from "@/lib/ipc";
 import { Barcode as BarcodeIcon, Printer, Check, X, Info } from "lucide-react";
 import JsBarcode from "jsbarcode";
+import { toast } from "sonner";
 
 interface BarcodeDialogProps {
   product: Product | null;
@@ -203,11 +204,26 @@ export function BarcodeDialog({ product, open, onOpenChange }: BarcodeDialogProp
         </html>
       `;
 
+      toast.loading("Printing Barcode Labels...", {
+        id: "barcode-print-toast",
+        description: `Sending ${copies} label copies to "${selectedPrinter || "Default Printer"}".`,
+      });
+
       const result = await printReceiptSilent(selectedPrinter, fullHtml);
       setPrintStatus(`Success: ${result}`);
+      
+      toast.success("Barcodes Printed", {
+        id: "barcode-print-toast",
+        description: `Successfully printed ${copies} labels for "${product?.name}".`,
+      });
     } catch (err: any) {
       console.error("Printing failed", err);
       setPrintStatus(`Failed: ${err.message || err}`);
+      
+      toast.error("Printing Failed", {
+        id: "barcode-print-toast",
+        description: err.message || "An unexpected error occurred during label printing.",
+      });
     } finally {
       setPrinting(false);
     }

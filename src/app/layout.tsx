@@ -72,7 +72,7 @@ export default function RootLayout({
             <ThemeColorProvider>
               <AlertProvider>
                 <AppLayout>{children}</AppLayout>
-                <Toaster closeButton position="top-right" />
+                <Toaster closeButton position="bottom-right" />
               </AlertProvider>
             </ThemeColorProvider>
           </QueryProvider>

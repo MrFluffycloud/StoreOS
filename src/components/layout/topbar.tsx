@@ -53,6 +53,7 @@ export default function Topbar({ onSearchClick, currentUser, currentRole, onLogo
   });
 
   const syncEnabled = dbSettings.find((s) => s.key === "supabase_sync_enabled")?.value === "true";
+  const hasLicense = dbSettings.some(s => s.key === "license_key" && s.value && s.value.trim().length > 0);
   const syncStatus = dbSettings.find((s) => s.key === "sync_status")?.value || "Synced";
   const lastSyncTime = dbSettings.find((s) => s.key === "last_sync_time")?.value || "Never";
 
@@ -115,31 +116,41 @@ export default function Topbar({ onSearchClick, currentUser, currentRole, onLogo
           )}
         </div>
 
-        {/* Sync Trigger / Indicator — only shown when Cloud Sync is enabled */}
-        {syncEnabled && (
-          <button
-            onClick={() => {
-              if (!isSyncing && isOnline) {
-                syncMutation.mutate();
-              }
-            }}
-            disabled={isSyncing || !isOnline}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-mono font-medium transition-all ${
-              isSyncing
-                ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
-                : !isOnline
-                ? "bg-zinc-500/10 text-zinc-500 border-zinc-500/10 opacity-50 cursor-not-allowed"
-                : "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20 hover:bg-sky-500/20"
-            }`}
-            title={!isOnline ? "Sync disabled (Offline)" : `Last Sync: ${formatLastSync(lastSyncTime)}`}
-          >
-            {isSyncing ? (
-              <RefreshCw className="w-3 h-3 animate-spin" />
-            ) : (
-              <Database className="w-3 h-3" />
-            )}
-            <span>{isSyncing ? "Syncing..." : "Cloud Synced"}</span>
-          </button>
+        {/* Sync Trigger / Indicator — only shown when Cloud Sync is activated/configured */}
+        {hasLicense && (
+          syncEnabled ? (
+            <button
+              onClick={() => {
+                if (!isSyncing && isOnline) {
+                  syncMutation.mutate();
+                }
+              }}
+              disabled={isSyncing || !isOnline}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-mono font-medium transition-all ${
+                isSyncing
+                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                  : !isOnline
+                  ? "bg-zinc-500/10 text-zinc-500 border-zinc-500/10 opacity-50 cursor-not-allowed"
+                  : "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20 hover:bg-sky-500/20"
+              }`}
+              title={!isOnline ? "Sync disabled (Offline)" : `Last Sync: ${formatLastSync(lastSyncTime)}`}
+            >
+              {isSyncing ? (
+                <RefreshCw className="w-3 h-3 animate-spin" />
+              ) : (
+                <Database className="w-3 h-3" />
+              )}
+              <span>{isSyncing ? "Syncing..." : "Cloud Synced"}</span>
+            </button>
+          ) : (
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-zinc-700/50 bg-zinc-800/10 text-zinc-500 dark:text-zinc-400 text-[10px] font-mono font-medium select-none"
+              title="Cloud sync is temporarily paused in settings."
+            >
+              <Database className="w-3 h-3 opacity-60" />
+              <span>Sync Paused</span>
+            </div>
+          )
         )}
 
         {/* Notifications */}
