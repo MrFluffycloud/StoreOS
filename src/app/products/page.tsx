@@ -13,6 +13,7 @@ import { RefreshCw, Plus, Edit2, Trash2, Upload, Eye, Barcode } from "lucide-rea
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/components/layout/app-layout";
 import { useAlerts } from "@/components/providers/alert-provider";
 import { toast } from "sonner";
@@ -519,7 +520,31 @@ export default function ProductsPage() {
         </div>
 
         {isLoading ? (
-          <div className="w-full h-64 border rounded-lg animate-pulse bg-card" />
+          <div className="border border-border/80 rounded-lg overflow-hidden bg-card/30 select-none">
+            <div className="bg-muted/30 border-b border-border/80 h-10 px-4 flex items-center justify-between gap-4">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+            <div className="divide-y divide-border/60">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="h-12 px-4 flex items-center justify-between gap-4">
+                  <Skeleton className="h-4 w-48" />
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-20" />
+                  <div className="flex gap-2">
+                    <Skeleton className="h-8 w-8 rounded" />
+                    <Skeleton className="h-8 w-8 rounded" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         ) : (
           <div className="space-y-4">
             <DataTable

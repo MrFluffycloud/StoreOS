@@ -23,6 +23,7 @@ import {
 } from "@/lib/ipc";
 import { Product, Supplier } from "@/types/storeos";
 import { Plus, RefreshCw, ShoppingBag, Receipt, Trash2, Eye } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { SearchableProductSelect } from "@/components/features/products/searchable-select";
 
 interface PurchaseItemRow {
@@ -380,7 +381,28 @@ export default function PurchasesPage() {
         </div>
 
         {isLoading ? (
-          <div className="w-full h-64 border rounded-lg animate-pulse bg-card" />
+          <div className="border border-border/80 rounded-lg overflow-hidden bg-card/30 select-none">
+            <div className="bg-muted/30 border-b border-border/80 h-10 px-4 flex items-center justify-between gap-4">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-4 w-36" />
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+            <div className="divide-y divide-border/60">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="h-12 px-4 flex items-center justify-between gap-4">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-4 w-44" />
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-8 w-12 rounded" />
+                </div>
+              ))}
+            </div>
+          </div>
         ) : (
           <div className="space-y-4">
             <DataTable

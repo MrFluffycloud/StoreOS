@@ -8,6 +8,7 @@ import { StatCard } from "@/components/ui/stat-card";
 import { DataTable } from "@/components/ui/data-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   getProducts,
   listInventoryMovements,
@@ -348,14 +349,63 @@ export default function DashboardPage() {
   if (isLoading) {
     return (
       <PageContainer title="Dashboard" subtitle="Overview of store performance">
+        {/* Metric Cards Skeleton */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 select-none">
           {[...Array(4)].map((_, i) => (
-            <Card key={i} className="h-28 animate-pulse border border-border bg-card" />
+            <Card key={i} className="bg-card border border-border p-6 flex flex-col justify-between h-28">
+              <div className="flex justify-between items-center w-full">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-4 w-4 rounded" />
+              </div>
+              <div className="space-y-1">
+                <Skeleton className="h-6 w-28" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+            </Card>
           ))}
         </div>
+
+        {/* Charts & Status Section Skeleton */}
         <div className="grid gap-6 md:grid-cols-6 mt-8">
-          <Card className="col-span-4 h-96 animate-pulse border border-border bg-card" />
-          <Card className="col-span-2 h-96 animate-pulse border border-border bg-card" />
+          {/* Main Chart Column */}
+          <Card className="col-span-4 bg-card border border-border p-6 flex flex-col justify-between h-96">
+            <div className="space-y-1">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3 w-48" />
+            </div>
+            {/* Chart mock bars */}
+            <div className="h-56 w-full flex items-end justify-between gap-4 px-2 mt-4">
+              {[...Array(12)].map((_, j) => {
+                const heights = ["h-12", "h-24", "h-36", "h-16", "h-28", "h-40", "h-20", "h-32", "h-44", "h-14", "h-30", "h-48"];
+                return <Skeleton key={j} className={`flex-1 rounded-t ${heights[j % heights.length]}`} />;
+              })}
+            </div>
+            <div className="flex justify-between w-full mt-2">
+              <Skeleton className="h-3 w-10" />
+              <Skeleton className="h-3 w-10" />
+              <Skeleton className="h-3 w-10" />
+            </div>
+          </Card>
+
+          {/* Sidebar / Recent Actions Column */}
+          <Card className="col-span-2 bg-card border border-border p-6 flex flex-col justify-between h-96">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-3 w-40" />
+            </div>
+            <div className="space-y-4 my-4 flex-1 justify-center flex flex-col">
+              {[...Array(4)].map((_, j) => (
+                <div key={j} className="flex items-center gap-3">
+                  <Skeleton className="h-8 w-8 rounded-full" />
+                  <div className="space-y-1 flex-1">
+                    <Skeleton className="h-3.5 w-full" />
+                    <Skeleton className="h-3 w-20" />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <Skeleton className="h-8 w-full rounded" />
+          </Card>
         </div>
       </PageContainer>
     );

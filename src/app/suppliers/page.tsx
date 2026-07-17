@@ -16,6 +16,7 @@ import {
 import { getSuppliers, createSupplier, deleteSupplier, importSuppliersBatch } from "@/lib/ipc";
 import { Supplier } from "@/types/storeos";
 import { Plus, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAlerts } from "@/components/providers/alert-provider";
 
 export default function SuppliersPage() {
@@ -350,7 +351,24 @@ export default function SuppliersPage() {
         </div>
 
         {isLoading ? (
-          <div className="w-full h-64 border rounded-lg animate-pulse bg-card" />
+          <div className="border border-border/80 rounded-lg overflow-hidden bg-card/30 select-none">
+            <div className="bg-muted/30 border-b border-border/80 h-10 px-4 flex items-center justify-between gap-4">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+            <div className="divide-y divide-border/60">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="h-12 px-4 flex items-center justify-between gap-4">
+                  <Skeleton className="h-4 w-48" />
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-8 w-8 rounded" />
+                </div>
+              ))}
+            </div>
+          </div>
         ) : (
           <div className="space-y-4">
             <DataTable columns={columns} data={displayedSuppliers} emptyMessage="No matching suppliers found." />

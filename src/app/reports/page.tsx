@@ -25,6 +25,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const chartConfig = {
   sales: {
@@ -406,10 +407,59 @@ export default function ReportsPage() {
         </div>
 
         {isLoading ? (
-          <div className="grid grid-cols-4 gap-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-24 rounded-lg bg-card animate-pulse border border-border" />
-            ))}
+          <div className="space-y-6 select-none animate-pulse">
+            {/* KPI Cards Skeleton */}
+            <div className="grid grid-cols-4 gap-4">
+              {[...Array(4)].map((_, i) => (
+                <Card key={i} className="bg-card border border-border/80 p-4 flex items-center justify-between h-20">
+                  <div className="space-y-2">
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-5 w-24" />
+                  </div>
+                  <Skeleton className="h-9 w-9 rounded" />
+                </Card>
+              ))}
+            </div>
+
+            {/* Chart Skeleton */}
+            <Card className="bg-card border border-border/80 p-6 flex flex-col justify-between h-64">
+              <div className="space-y-1 mb-4">
+                <Skeleton className="h-4.5 w-32" />
+              </div>
+              <div className="h-44 w-full flex items-end justify-between gap-4 px-2">
+                {[...Array(15)].map((_, j) => {
+                  const heights = ["h-12", "h-24", "h-36", "h-16", "h-28", "h-40", "h-20", "h-32", "h-44", "h-14", "h-30", "h-48"];
+                  return <Skeleton key={j} className={`flex-1 rounded-t ${heights[j % heights.length]}`} />;
+                })}
+              </div>
+            </Card>
+
+            {/* Tables Grid Skeleton */}
+            <div className="grid grid-cols-3 gap-6">
+              <Card className="bg-card border border-border/80 p-6 col-span-2 space-y-4">
+                <Skeleton className="h-4 w-44" />
+                <div className="space-y-3">
+                  {[...Array(5)].map((_, j) => (
+                    <div key={j} className="flex justify-between items-center h-10 border-b border-border/40 pb-2">
+                      <Skeleton className="h-3.5 w-32" />
+                      <Skeleton className="h-3.5 w-20" />
+                      <Skeleton className="h-3.5 w-16" />
+                    </div>
+                  ))}
+                </div>
+              </Card>
+              <Card className="bg-card border border-border/80 p-6 space-y-4">
+                <Skeleton className="h-4 w-40" />
+                <div className="space-y-3">
+                  {[...Array(5)].map((_, j) => (
+                    <div key={j} className="flex justify-between items-center h-10 border-b border-border/40 pb-2">
+                      <Skeleton className="h-3.5 w-24" />
+                      <Skeleton className="h-3.5 w-12" />
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </div>
           </div>
         ) : (
           <>
