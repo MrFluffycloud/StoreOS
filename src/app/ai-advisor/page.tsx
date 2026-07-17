@@ -24,12 +24,15 @@ import {
   Layers,
   ArrowUpRight,
   Check,
-  AlertCircle
+  AlertCircle,
+  Trash2
 } from "lucide-react";
-import { getProducts, listInventoryMovements, getSuppliers, getSettings, setSetting, callGemini } from "@/lib/ipc";
+import { getProducts, listInventoryMovements, getSuppliers, getSettings, setSetting, callGemini, listAiModels } from "@/lib/ipc";
 import { useAlerts } from "@/components/providers/alert-provider";
 import { toast } from "sonner";
-import { AI_Prompt } from "@/components/ui/animated-ai-input";
+import { AI_Prompt, formatModelName } from "@/components/ui/animated-ai-input";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface InsightItem {
   category: "Inventory" | "Pricing" | "Sales" | "Strategy";
@@ -63,6 +66,23 @@ export default function AIAdvisorPage() {
   const [chatLoading, setChatLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Dynamic models state
+  const [aiModels, setAiModels] = useState<string[]>(["gpt-4.1", "gpt-4.1-mini", "deepseek-v3"]);
+
+  useEffect(() => {
+    const fetchModels = async () => {
+      try {
+        const models = await listAiModels();
+        if (models && models.length > 0) {
+          setAiModels(models);
+        }
+      } catch (e) {
+        console.warn("Failed to fetch models in advisor:", e);
+      }
+    };
+    fetchModels();
+  }, []);
+
   // 1. Fetch DB records
   const { data: dbSettings = [], refetch: refetchSettings } = useQuery({
     queryKey: ["settings"],
@@ -90,7 +110,7 @@ export default function AIAdvisorPage() {
   const apiKey = dbSettings.find((s) => s.key === "gemini_api_key")?.value || "";
   const modelName = dbSettings.find((s) => s.key === "gemini_model")?.value || "gemini-2.5-flash-lite";
 
-  // Load cached insights from local storage on mount
+  // Load cached insights and chat history from local storage on mount
   useEffect(() => {
     const cached = localStorage.getItem("storeos_ai_insights");
     const cachedTime = localStorage.getItem("storeos_ai_insights_time");
@@ -102,7 +122,28 @@ export default function AIAdvisorPage() {
         console.error("Failed to parse cached insights", e);
       }
     }
+
+    const cachedChat = localStorage.getItem("storeos_ai_chat_history");
+    if (cachedChat) {
+      try {
+        const parsedChat = JSON.parse(cachedChat).map((m: any) => ({
+          ...m,
+          timestamp: new Date(m.timestamp),
+        }));
+        setMessages(parsedChat);
+      } catch (e) {
+        console.error("Failed to parse cached chat history", e);
+      }
+    }
   }, []);
+
+  // Persist messages whenever they change
+  useEffect(() => {
+    if (messages.length > 0) {
+      const cleanMessages = messages.filter((m) => m.text !== "");
+      localStorage.setItem("storeos_ai_chat_history", JSON.stringify(cleanMessages));
+    }
+  }, [messages]);
 
   // Scroll to bottom of chat
   useEffect(() => {
@@ -275,14 +316,14 @@ ${JSON.stringify(context, null, 2)}`;
     } catch (err: any) {
       console.error(err);
       toast.error("Failed to generate insights", {
-        description: err.message || "Ensure your API Key is valid and try again.",
+        description: err.message || "Ensure you are connected to the internet and try again.",
       });
     } finally {
       setGeneratingInsights(false);
     }
   };
 
-  // Handle Chat message sending
+  // Handle Chat message sending with real-time SSE event streaming
   const handleSendMessage = async (textToSend?: string) => {
     const messageText = textToSend || inputText;
     if (!messageText.trim() || chatLoading) return;
@@ -296,8 +337,18 @@ ${JSON.stringify(context, null, 2)}`;
       timestamp: new Date(),
     };
 
-    setMessages((prev) => [...prev, newUserMsg]);
+    const botMessageId = Math.random().toString();
+    const newBotMsg: Message = {
+      id: botMessageId,
+      role: "model",
+      text: "",
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, newUserMsg, newBotMsg]);
     setChatLoading(true);
+
+    let unlisten: (() => void) | null = null;
 
     try {
       const context = compileContextSummary();
@@ -315,21 +366,36 @@ ${JSON.stringify(context, null, 2)}`;
         parts: [{ text: m.text }],
       }));
 
+      // Bind chunk listener
+      let currentText = "";
+      const { listen } = await import("@tauri-apps/api/event");
+      unlisten = await listen<string>("ai-chunk", (event) => {
+        currentText += event.payload;
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === botMessageId ? { ...msg, text: currentText } : msg
+          )
+        );
+      });
+
       const response = await callGemini(JSON.stringify(chatHistory), systemInstruction);
 
-      const newBotMsg: Message = {
-        id: Math.random().toString(),
-        role: "model",
-        text: response,
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, newBotMsg]);
+      // Set final full response in case chunks were delayed/missed
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === botMessageId ? { ...msg, text: response } : msg
+        )
+      );
     } catch (err: any) {
       toast.error("AI Advisor error", {
-        description: err.message || "Failed to contact Gemini API. Verify internet connection.",
+        description: err.message || "Failed to contact AI API. Verify internet connection.",
       });
+      // Remove empty bot message if failed completely
+      setMessages((prev) => prev.filter((msg) => msg.id !== botMessageId || msg.text !== ""));
     } finally {
+      if (unlisten) {
+        unlisten();
+      }
       setChatLoading(false);
     }
   };
@@ -356,100 +422,11 @@ ${JSON.stringify(context, null, 2)}`;
     "Help me negotiate a volume discount script for key suppliers.",
   ];
 
-  // Render Onboarding Screen if API key is not configured
-  if (!apiKey) {
-    return (
-      <PageContainer
-        title="AI Advisor"
-        subtitle="Unleash strategic business analytics powered by Google Gemini AI"
-      >
-        <div className="max-w-2xl mx-auto py-12 select-none">
-          <div className="text-center space-y-4 mb-10">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 text-primary border border-primary/20 shadow-[0_0_15px_rgba(var(--primary-rgb),0.1)]">
-              <Sparkles className="w-7.5 h-7.5 animate-pulse" />
-            </div>
-            <h2 className="text-xl font-bold tracking-tight text-foreground">Activate Your AI Business Advisor</h2>
-            <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">
-              Unlock intelligent recommendations, stock forecasting, margin audits, and custom business coaching. Enter a Google Gemini API Key below to start.
-            </p>
-          </div>
-
-          <Card className="border border-border bg-card shadow-md">
-            <CardContent className="pt-6 space-y-6">
-              <form onSubmit={handleSaveApiKey} className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <Label htmlFor="apiKey" className="text-xs font-semibold text-foreground">Gemini API Key</Label>
-                    <a
-                      href="https://aistudio.google.com/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[10px] text-primary hover:underline flex items-center gap-0.5"
-                    >
-                      Get a free key in Google AI Studio <ArrowUpRight className="w-2.5 h-2.5" />
-                    </a>
-                  </div>
-                  <div className="relative">
-                    <Input
-                      id="apiKey"
-                      type="password"
-                      placeholder="Enter AIzaSy... API Key"
-                      value={apiKeyInput}
-                      onChange={(e) => setApiKeyInput(e.target.value)}
-                      className="h-9.5 text-xs pr-10 font-mono"
-                    />
-                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-muted-foreground">
-                      <Lock className="w-3.5 h-3.5" />
-                    </div>
-                  </div>
-                </div>
-
-                <Button
-                  type="submit"
-                  disabled={savingKey || !apiKeyInput}
-                  className="w-full h-9.5 text-xs font-semibold flex items-center justify-center gap-1.5"
-                >
-                  {savingKey ? (
-                    <>
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Saving Configuration...
-                    </>
-                  ) : (
-                    <>
-                      Activate AI Capabilities <ArrowRight className="w-3.5 h-3.5" />
-                    </>
-                  )}
-                </Button>
-              </form>
-
-              <div className="pt-6 border-t border-border/40 grid grid-cols-2 gap-4">
-                <div className="space-y-1.5 p-3 rounded-lg border border-border/50 bg-muted/20">
-                  <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                    <Check className="w-3.5 h-3.5 text-emerald-500" /> Secure and Private
-                  </h4>
-                  <p className="text-[10px] text-muted-foreground leading-normal">
-                    Your key is stored locally in the SQLite database and only sent directly to Google servers. No third-party relays.
-                  </p>
-                </div>
-                <div className="space-y-1.5 p-3 rounded-lg border border-border/50 bg-muted/20">
-                  <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                    <Check className="w-3.5 h-3.5 text-emerald-500" /> Generous Free Tier
-                  </h4>
-                  <p className="text-[10px] text-muted-foreground leading-normal">
-                    Google AI Studio provides a free rate limit (up to 15 RPM for Gemini 2.5 Flash), costing you $0 for daily store operations.
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </PageContainer>
-    );
-  }
-
+  // Render main layout directly since GPT4Free is free and requires no key onboarding
   return (
     <PageContainer
       title="AI Business Advisor"
-      subtitle="Strategic insights, stock analysis, and pricing audits powered by Google Gemini AI"
+      subtitle="Strategic insights, stock analysis, and pricing audits powered by GPT4Free AI"
     >
       <div className="space-y-6">
         {/* Navigation Tab Header */}
@@ -477,9 +454,23 @@ ${JSON.stringify(context, null, 2)}`;
             </button>
           </div>
 
-          <div className="text-[10px] text-muted-foreground bg-muted/40 px-2.5 py-1 rounded-full border border-border/30 mb-2 flex items-center gap-1 font-mono">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
-            Using {modelName}
+          <div className="flex items-center gap-3 mb-2">
+            {activeTab === "chat" && messages.length > 0 && (
+              <button
+                onClick={() => {
+                  setMessages([]);
+                  localStorage.removeItem("storeos_ai_chat_history");
+                  toast.success("Chat history cleared.");
+                }}
+                className="text-[10px] text-muted-foreground hover:text-destructive flex items-center gap-1 transition-colors px-2 py-1 rounded border border-border/40 hover:bg-destructive/5 font-semibold cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Clear Chat
+              </button>
+            )}
+            <div className="text-[10px] text-muted-foreground bg-muted/40 px-2.5 py-1 rounded-full border border-border/30 flex items-center gap-1 font-mono">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+              Using {formatModelName(modelName.startsWith("gemini") ? "gpt-4.1" : modelName)}
+            </div>
           </div>
         </div>
 
@@ -643,7 +634,58 @@ ${JSON.stringify(context, null, 2)}`;
                         ? "bg-primary text-primary-foreground rounded-tr-none"
                         : "bg-muted/50 border border-border/50 text-foreground rounded-tl-none prose prose-invert prose-xs leading-normal max-w-none"
                     }`}>
-                      <div className="whitespace-pre-wrap">{m.text}</div>
+                      {isUser ? (
+                        <div className="whitespace-pre-wrap">{m.text}</div>
+                      ) : (
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            table: ({ node, ...props }) => (
+                              <div className="overflow-x-auto my-2 border border-border/40 rounded-lg bg-card/50">
+                                <table className="w-full text-left border-collapse text-[11px]" {...props} />
+                              </div>
+                            ),
+                            thead: ({ node, ...props }) => (
+                              <thead className="bg-muted text-muted-foreground border-b border-border/40 font-bold" {...props} />
+                            ),
+                            th: ({ node, ...props }) => (
+                              <th className="p-2 border-r border-border/30 last:border-r-0 font-semibold" {...props} />
+                            ),
+                            td: ({ node, ...props }) => (
+                              <td className="p-2 border-r border-border/30 last:border-r-0 border-t border-border/20" {...props} />
+                            ),
+                            tr: ({ node, ...props }) => (
+                              <tr className="hover:bg-muted/30 transition-colors" {...props} />
+                            ),
+                            p: ({ node, ...props }) => <p className="mb-2 last:mb-0 leading-relaxed" {...props} />,
+                            ul: ({ node, ...props }) => <ul className="list-disc pl-4 mb-2 last:mb-0 space-y-1" {...props} />,
+                            ol: ({ node, ...props }) => <ol className="list-decimal pl-4 mb-2 last:mb-0 space-y-1" {...props} />,
+                            li: ({ node, ...props }) => <li className="pl-0.5" {...props} />,
+                            h1: ({ node, ...props }) => <h1 className="text-sm font-bold mt-4 mb-2 first:mt-0" {...props} />,
+                            h2: ({ node, ...props }) => <h2 className="text-xs font-bold mt-3 mb-1.5 first:mt-0" {...props} />,
+                            h3: ({ node, ...props }) => <h3 className="text-[11px] font-bold mt-2.5 mb-1 first:mt-0" {...props} />,
+                            pre: ({ node, ...props }) => (
+                              <pre className="bg-neutral-950 dark:bg-black p-3 rounded-lg overflow-x-auto border border-border/40 my-2 font-mono text-[10px] text-emerald-400" {...props} />
+                            ),
+                            code: ({ node, inline, className, children, ...props }: any) => {
+                              const match = /language-(\w+)/.exec(className || '');
+                              const isInline = !match && !String(children).includes('\n');
+                              return isInline ? (
+                                <code className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-mono border border-border/40 text-rose-500 dark:text-rose-400" {...props}>
+                                  {children}
+                                </code>
+                              ) : (
+                                <code className="text-emerald-400 font-mono" {...props}>
+                                  {children}
+                                </code>
+                              );
+                            },
+                            a: ({ node, ...props }) => <a className="text-primary underline hover:text-primary/95" {...props} />,
+                          }}
+                        >
+                          {m.text}
+                        </ReactMarkdown>
+                      )}
                     </div>
                   </div>
                 );
@@ -676,12 +718,7 @@ ${JSON.stringify(context, null, 2)}`;
                 disabled={chatLoading}
                 selectedModel={modelName}
                 onModelChange={handleModelChange}
-                models={[
-                  "gemini-2.5-flash-lite",
-                  "gemini-3.1-flash-lite",
-                  "gemini-3.5-flash",
-                  "gemini-2.5-pro",
-                ]}
+                models={aiModels}
               />
             </div>
           </div>

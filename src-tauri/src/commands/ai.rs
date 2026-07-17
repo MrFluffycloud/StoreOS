@@ -1,6 +1,6 @@
 use crate::database::connection::DbState;
 use crate::repositories::settings::SettingsRepository;
-use tauri::State;
+use tauri::{State, Emitter};
 use serde::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -15,53 +15,37 @@ struct GeminiContent {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct GeminiPayload {
-    contents: Vec<GeminiContent>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "systemInstruction")]
-    system_instruction: Option<GeminiSystemInstruction>,
+struct OpenAIMessage {
+    role: String,
+    content: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct GeminiSystemInstruction {
-    parts: Vec<GeminiPart>,
+struct OpenAIPayload {
+    model: String,
+    messages: Vec<OpenAIMessage>,
+    stream: bool,
 }
 
 #[tauri::command]
 pub async fn call_gemini(
+    window: tauri::Window,
     state: State<'_, DbState>,
     contents_json: String,
     system_instruction: Option<String>,
 ) -> Result<String, String> {
     let conn = state.pool.get().map_err(|e| e.to_string())?;
     
-    // 1. Retrieve the Gemini API key from database settings
-    let mut api_key = SettingsRepository::get(&conn, "gemini_api_key")
-        .map_err(|e| e.to_string())?
-        .unwrap_or_default();
-        
-    // 2. Fall back to environment variable if database key is empty
-    if api_key.trim().is_empty() {
-        api_key = std::env::var("GEMINI_API_KEY").unwrap_or_default();
-    }
-    
-    if api_key.trim().is_empty() {
-        return Err("API_KEY_MISSING".to_string());
-    }
-
-    // 3. Retrieve model from settings or default to gemini-2.5-flash-lite
+    // Retrieve model from settings or default to gpt-4.1
     let mut model = SettingsRepository::get(&conn, "gemini_model")
         .map_err(|e| e.to_string())?
-        .unwrap_or_else(|| "gemini-2.5-flash-lite".to_string());
+        .unwrap_or_else(|| "gpt-4.1".to_string());
     
-    if model.trim().is_empty() || model == "gemini-2.5-flash" {
-        model = "gemini-2.5-flash-lite".to_string();
-        // Automatically save the migrated model back to the DB
-        let _ = SettingsRepository::set(&conn, "gemini_model", &model);
+    if model.trim().is_empty() || model.starts_with("gemini") {
+        model = "gpt-4.1".to_string();
     }
-    
-    let model_name = model;
 
-    // 4. Parse contents_json
+    // 1. Parse incoming Gemini contents JSON
     let contents: Vec<GeminiContent> = if contents_json.trim().starts_with('[') {
         serde_json::from_str(&contents_json)
             .map_err(|e| format!("Failed to parse contents JSON: {}", e))?
@@ -72,44 +56,134 @@ pub async fn call_gemini(
         }]
     };
 
-    let system_instruction_obj = system_instruction.map(|text| GeminiSystemInstruction {
-        parts: vec![GeminiPart { text }],
-    });
+    // 2. Map Gemini payload structure to standard OpenAI format expected by GPT4Free
+    let mut messages = Vec::new();
+    if let Some(sys) = system_instruction {
+        if !sys.trim().is_empty() {
+            messages.push(OpenAIMessage {
+                role: "system".to_string(),
+                content: sys,
+            });
+        }
+    }
 
-    let payload = GeminiPayload {
-        contents,
-        system_instruction: system_instruction_obj,
+    for item in contents {
+        let role = if item.role == "model" || item.role == "assistant" || item.role == "bot" { 
+            "assistant" 
+        } else { 
+            "user" 
+        };
+        let content = item.parts.iter().map(|p| p.text.clone()).collect::<Vec<_>>().join("\n");
+        messages.push(OpenAIMessage {
+            role: role.to_string(),
+            content,
+        });
+    }
+
+    let payload = OpenAIPayload {
+        model,
+        messages,
+        stream: true, // Enable streaming
     };
 
-    let client = reqwest::Client::new();
-    let url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
-        model_name, api_key
-    );
+    println!("GPT4Free API payload: {:#?}", payload);
 
-    let response = client
-        .post(&url)
+    // 3. Make POST request to g4f.space completions API
+    let client = reqwest::Client::new();
+    let url = "https://g4f.space/v1/chat/completions";
+
+    let mut response = client
+        .post(url)
         .json(&payload)
         .send()
         .await
-        .map_err(|e| format!("HTTP request failed: {}", e))?;
+        .map_err(|e| format!("HTTP request to GPT4Free failed: {}", e))?;
 
     if !response.status().is_success() {
         let status = response.status();
         let err_text = response.text().await.unwrap_or_default();
-        return Err(format!("Gemini API error ({}): {}", status, err_text));
+        return Err(format!("GPT4Free API error ({}): {}", status, err_text));
+    }
+
+    // 4. Stream response and emit chunks to frontend
+    let mut full_text = String::new();
+    let mut buffer = String::new();
+
+    while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+        if let Ok(chunk_str) = std::str::from_utf8(&chunk) {
+            buffer.push_str(chunk_str);
+            while let Some(pos) = buffer.find('\n') {
+                let line = buffer[..pos].trim().to_string();
+                buffer = buffer[pos + 1..].to_string();
+                
+                if line.starts_with("data: ") {
+                    let data_str = line["data: ".len()..].trim();
+                    if data_str == "[DONE]" {
+                        break;
+                    }
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(data_str) {
+                        if let Some(content) = val["choices"][0]["delta"]["content"].as_str() {
+                            full_text.push_str(content);
+                            // Emit the chunk to the frontend via event emitter
+                            let _ = window.emit("ai-chunk", content);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // If for some reason the stream yielded nothing, try to parse the buffer as standard JSON (fallback)
+    if full_text.trim().is_empty() {
+        if let Ok(res_json) = serde_json::from_str::<serde_json::Value>(&buffer) {
+            if let Some(content) = res_json["choices"][0]["message"]["content"].as_str() {
+                full_text = content.to_string();
+            }
+        }
+    }
+
+    Ok(full_text)
+}
+
+#[tauri::command]
+pub async fn list_ai_models() -> Result<Vec<String>, String> {
+    let client = reqwest::Client::new();
+    let url = "https://g4f.space/v1/models";
+    let response = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("HTTP request to list models failed: {}", e))?;
+
+    if !response.status().is_success() {
+        return Ok(vec![
+            "gpt-4.1".to_string(),
+            "gpt-4.1-mini".to_string(),
+            "deepseek-v3".to_string(),
+        ]);
     }
 
     let res_json: serde_json::Value = response
         .json()
         .await
-        .map_err(|e| format!("Failed to parse JSON response: {}", e))?;
+        .map_err(|e| format!("Failed to parse models JSON: {}", e))?;
 
-    // Extract text from the response payload: candidates[0].content.parts[0].text
-    let text = res_json["candidates"][0]["content"]["parts"][0]["text"]
-        .as_str()
-        .ok_or_else(|| format!("Invalid response format from Gemini API: {:?}", res_json))?
-        .to_string();
+    let mut model_names = Vec::new();
+    if let Some(data) = res_json["data"].as_array() {
+        for m in data {
+            if let Some(id) = m["id"].as_str() {
+                model_names.push(id.to_string());
+            }
+        }
+    }
 
-    Ok(text)
+    if model_names.is_empty() {
+        model_names = vec![
+            "gpt-4.1".to_string(),
+            "gpt-4.1-mini".to_string(),
+            "deepseek-v3".to_string(),
+        ];
+    }
+
+    Ok(model_names)
 }

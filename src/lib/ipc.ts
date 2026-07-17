@@ -297,6 +297,9 @@ export const callGemini = (contentsJson: string, systemInstruction?: string) =>
     "Mocked Gemini response: Database context analyzed. Please configure your Gemini API Key in Settings and launch the Tauri app to interact with the real Gemini model."
   );
 
+export const listAiModels = () =>
+  safeInvoke<string[]>("list_ai_models", {}, ["gpt-4.1", "gpt-4.1-mini", "deepseek-v3"]);
+
 // Finance & Double-Entry Accounting
 export const getAccounts = () =>
   safeInvoke<any[]>("get_accounts", {}, [

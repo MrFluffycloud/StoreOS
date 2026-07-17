@@ -69,6 +69,7 @@ pub fn run() {
             commands::scanner_server::print_receipt_raw,
             commands::scanner_server::save_receipt_pdf,
             commands::ai::call_gemini,
+            commands::ai::list_ai_models,
             commands::health::get_system_health,
             commands::finance::get_accounts,
             commands::finance::get_journal_entries,

@@ -6,11 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getSettings, setSetting, resetStore, listSystemPrinters, getProducts, listInventoryMovements, getSuppliers, getUsers, verifyLicenseKey, replicateTable } from "@/lib/ipc";
+import { getSettings, setSetting, resetStore, listSystemPrinters, getProducts, listInventoryMovements, getSuppliers, getUsers, verifyLicenseKey, replicateTable, listAiModels } from "@/lib/ipc";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Settings, Save, Check, Printer, User, ShieldAlert, Cloud, CheckCircle2, AlertCircle, ArrowRight, Lock, Database, RefreshCw, Trash2, Settings2, Sparkles } from "lucide-react";
 import { useAuth } from "@/components/layout/app-layout";
 import UserAccountsManager from "@/components/features/settings/user-accounts";
+import { formatModelName } from "@/components/ui/animated-ai-input";
 import { printPOSReceipt } from "@/lib/printer";
 import { useAlerts } from "@/components/providers/alert-provider";
 import { toast } from "sonner";
@@ -23,9 +24,9 @@ export default function SettingsPage() {
 
   const [activeTab, setActiveTab] = useState<"shop" | "users" | "receipt" | "sync" | "ai">("shop");
 
-  // Gemini AI settings states
-  const [geminiApiKey, setGeminiApiKey] = useState("");
-  const [geminiModel, setGeminiModel] = useState("gemini-2.5-flash-lite");
+  // GPT4Free AI settings states
+  const [geminiModel, setGeminiModel] = useState("gpt-4.1");
+  const [aiModels, setAiModels] = useState<string[]>(["gpt-4.1", "gpt-4.1-mini", "deepseek-v3"]);
 
   const { data: dbSettings = [], refetch } = useQuery({
     queryKey: ["settings"],
@@ -38,6 +39,21 @@ export default function SettingsPage() {
   const [storeName, setStoreName] = useState("");
   const [currency, setCurrency] = useState("");
   const [taxRate, setTaxRate] = useState("");
+
+  // Fetch available AI models
+  useEffect(() => {
+    const fetchModels = async () => {
+      try {
+        const models = await listAiModels();
+        if (models && models.length > 0) {
+          setAiModels(models);
+        }
+      } catch (e) {
+        console.warn("Failed to fetch dynamic AI models:", e);
+      }
+    };
+    fetchModels();
+  }, []);
   const [themeColor, setThemeColor] = useState("slate");
   const [productIdFormat, setProductIdFormat] = useState("sku_barcode");
   const [storeGstin, setStoreGstin] = useState("");
@@ -137,13 +153,11 @@ export default function SettingsPage() {
       setLicenseKey(sLicense);
       setStoreId(sStoreId);
 
-      // Load Gemini settings
-      const gApiKey = dbSettings.find((s) => s.key === "gemini_api_key")?.value || "";
-      let gModel = dbSettings.find((s) => s.key === "gemini_model")?.value || "gemini-2.5-flash-lite";
-      if (gModel === "gemini-2.5-flash") {
-        gModel = "gemini-2.5-flash-lite";
+      // Load AI settings
+      let gModel = dbSettings.find((s) => s.key === "gemini_model")?.value || "gpt-4.1";
+      if (gModel.startsWith("gemini")) {
+        gModel = "gpt-4.1";
       }
-      setGeminiApiKey(gApiKey);
       setGeminiModel(gModel);
     }
   }, [dbSettings]);
@@ -264,7 +278,6 @@ export default function SettingsPage() {
         await setSetting("supabase_key", supabaseKey);
         await setSetting("supabase_sync_enabled", supabaseSyncEnabled);
       } else if (activeTab === "ai") {
-        await setSetting("gemini_api_key", geminiApiKey);
         await setSetting("gemini_model", geminiModel);
       }
       
@@ -1205,56 +1218,31 @@ export default function SettingsPage() {
             )}
           </div>
         ) : activeTab === "ai" ? (
-          <div className="max-w-2xl space-y-6 select-none">
+          <div className="max-w-2xl space-y-6 select-none animate-in fade-in slide-in-from-bottom-2 duration-300">
             <Card className="border border-border bg-card shadow-sm">
               <CardHeader className="border-b border-border/55 pb-4">
-                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-primary animate-pulse" /> Google Gemini AI Integration
+                <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-primary animate-pulse" /> GPT4Free AI Advisor Integration
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-6">
                 <form onSubmit={handleSave} className="space-y-6">
                   <div className="space-y-2">
-                    <Label htmlFor="geminiApiKey" className="text-xs font-semibold text-foreground flex items-center justify-between">
-                      <span>Gemini API Key</span>
-                      {geminiApiKey ? (
-                        <span className="text-[10px] text-emerald-500 flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" /> Configured Locally
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-amber-500 flex items-center gap-1">
-                          <AlertCircle className="w-3 h-3" /> API Key Missing
-                        </span>
-                      )}
-                    </Label>
-                    <Input
-                      id="geminiApiKey"
-                      type="password"
-                      value={geminiApiKey}
-                      onChange={(e) => setGeminiApiKey(e.target.value)}
-                      placeholder="e.g. AIzaSy..."
-                      className="h-9 text-xs"
-                    />
-                    <p className="text-[10px] text-muted-foreground">
-                      Your API key is stored securely in your local database. It is never transmitted to anyone except Google's Gemini servers during requests.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="geminiModel" className="text-xs font-semibold text-foreground">Gemini Model</Label>
+                    <Label htmlFor="geminiModel" className="text-xs font-bold text-foreground">Strategic Advisor Model</Label>
                     <select
                       id="geminiModel"
                       value={geminiModel}
                       onChange={(e) => setGeminiModel(e.target.value)}
                       className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
                     >
-                      <option value="gemini-2.5-flash-lite" className="bg-background text-foreground">Gemini 2.5 Flash Lite (Recommended - Fast & Budget)</option>
-                      <option value="gemini-3.1-flash-lite" className="bg-background text-foreground">Gemini 3.1 Flash Lite (Sleek - Low latency)</option>
-                      <option value="gemini-3.5-flash" className="bg-background text-foreground">Gemini 3.5 Flash (Frontier - Agentic & Coding)</option>
-                      <option value="gemini-2.5-pro" className="bg-background text-foreground">Gemini 2.5 Pro (Deep Reasoning)</option>
+                      {aiModels.map((m) => (
+                        <option key={m} value={m} className="bg-background text-foreground">
+                          {formatModelName(m)} {m === "gpt-4.1" ? "(Default - Recommended)" : ""}
+                        </option>
+                      ))}
                     </select>
                     <p className="text-[10px] text-muted-foreground">
-                      We recommend Gemini 2.5 Flash Lite or Gemini 3.1 Flash Lite for fast and cost-effective operations.
+                      Select the model to route your AI advisor requests through. GPT4Free processes requests completely free and securely without API keys.
                     </p>
                   </div>
 
