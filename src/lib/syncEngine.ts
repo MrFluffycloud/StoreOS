@@ -1,7 +1,9 @@
 import { getSetting, setSetting, syncDatabase } from "./ipc";
+import { toast } from "sonner";
 
 let syncTimer: any = null;
 let isSyncing = false;
+let hasActiveSyncError = false;
 
 /**
  * Triggers a sync iteration. Delegates the query and REST network calls entirely to
@@ -26,8 +28,25 @@ export async function performDatabaseSync() {
     }
 
     await syncDatabase();
-  } catch (err) {
+
+    // If we successfully sync and had a previous active sync error, show a recovery toast
+    if (hasActiveSyncError) {
+      toast.success("Cloud Sync Resumed", {
+        description: "Successfully reconnected and synchronized with the cloud database.",
+        id: "sync-status-toast",
+      });
+      hasActiveSyncError = false;
+    }
+  } catch (err: any) {
     console.error("Cloud Sync background worker failed:", err);
+    // Only alert on initial transition to error state to avoid spamming the user
+    if (!hasActiveSyncError) {
+      toast.error("Cloud Sync Failed", {
+        description: "Could not connect to the cloud database. Retrying in background...",
+        id: "sync-status-toast",
+      });
+      hasActiveSyncError = true;
+    }
   } finally {
     isSyncing = false;
   }

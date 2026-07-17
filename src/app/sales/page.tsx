@@ -48,6 +48,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/components/layout/app-layout";
 import { useAlerts } from "@/components/providers/alert-provider";
+import { toast } from "sonner";
 
 export default function SalesPage() {
   const queryClient = useQueryClient();
@@ -760,6 +761,17 @@ export default function SalesPage() {
       setActiveReceiptTab(0);
       setReceiptOpen(true);
       clearCart();
+
+      toast.success("Checkout Completed", {
+        description: data.isSplit
+          ? `Successfully checked out: generated ${data.receipts.length} split receipts.`
+          : "Receipt successfully checked out.",
+      });
+    },
+    onError: (err: any) => {
+      toast.error("Checkout Failed", {
+        description: err.message || "An unexpected error occurred during checkout.",
+      });
     },
   });
 

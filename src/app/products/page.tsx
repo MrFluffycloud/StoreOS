@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/components/layout/app-layout";
 import { useAlerts } from "@/components/providers/alert-provider";
+import { toast } from "sonner";
 
 export default function ProductsPage() {
   const queryClient = useQueryClient();
@@ -322,6 +323,14 @@ export default function ProductsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["inventorySummary"] });
+      toast.success("Product Deleted", {
+        description: "The product was successfully removed from the database.",
+      });
+    },
+    onError: (err: any) => {
+      toast.error("Deletion Failed", {
+        description: err.message || "Could not delete the product.",
+      });
     },
   });
 

@@ -18,6 +18,7 @@ import { createProduct, updateProduct, getSettings } from "@/lib/ipc";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/components/layout/app-layout";
 import { Image as ImageIcon } from "lucide-react";
+import { toast } from "sonner";
 
 const productSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -141,10 +142,18 @@ export function ProductDialog({ product, open, onOpenChange }: ProductDialogProp
         return createProduct(input);
       }
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["inventorySummary"] });
       onOpenChange(false);
+      toast.success(isEditing ? "Product Updated" : "Product Created", {
+        description: `Successfully ${isEditing ? "updated" : "created"} product "${variables.name}".`,
+      });
+    },
+    onError: (err: any) => {
+      toast.error("Failed to Save Product", {
+        description: err.message || "An unexpected error occurred while saving the product.",
+      });
     },
   });
 
