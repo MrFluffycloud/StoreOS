@@ -483,7 +483,7 @@ export default function ReportsPage() {
                   </Button>
                 }>
                 </PopoverTrigger>
-                <PopoverContent className="p-0 border border-border/80 bg-popover rounded-lg shadow-xl z-50 overflow-hidden">
+                <PopoverContent className="w-auto p-0 border border-border/80 bg-popover rounded-lg shadow-xl z-50 overflow-hidden">
                   <DateCalendar
                     mode="range"
                     selected={customRange}
