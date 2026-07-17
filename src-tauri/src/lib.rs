@@ -68,7 +68,25 @@ pub fn run() {
             commands::scanner_server::print_receipt_silent,
             commands::scanner_server::print_receipt_raw,
             commands::scanner_server::save_receipt_pdf,
-            commands::health::get_system_health
+            commands::ai::call_gemini,
+            commands::health::get_system_health,
+            commands::finance::get_accounts,
+            commands::finance::get_journal_entries,
+            commands::finance::create_manual_journal_entry,
+            commands::finance::update_manual_journal_entry,
+            commands::finance::delete_journal_entry,
+            commands::finance::get_balance_sheet,
+            commands::finance::get_profit_loss,
+            commands::hr::get_employees,
+            commands::hr::create_employee,
+            commands::hr::update_employee,
+            commands::hr::get_attendance_logs,
+            commands::hr::clock_in_out,
+            commands::hr::get_current_attendance_status,
+            commands::hr::list_payroll_runs,
+            commands::hr::generate_payroll_run,
+            commands::hr::run_auto_payroll,
+            commands::hr::pay_payroll_run
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

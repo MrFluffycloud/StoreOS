@@ -105,6 +105,95 @@ pub fn run_migrations(conn: &mut Connection) -> Result<(), String> {
             8,
             "ALTER TABLE products ADD COLUMN unit TEXT DEFAULT 'PCs';"
         ),
+        (
+            9,
+            "CREATE TABLE accounts (
+                code TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                type TEXT NOT NULL CHECK(type IN ('Asset', 'Liability', 'Equity', 'Revenue', 'Expense'))
+             );
+             CREATE TABLE journal_entries (
+                id TEXT PRIMARY KEY,
+                reference_type TEXT NOT NULL,
+                reference_id TEXT NOT NULL,
+                description TEXT,
+                timestamp TEXT NOT NULL,
+                created_at TEXT NOT NULL
+             );
+             CREATE TABLE journal_items (
+                id TEXT PRIMARY KEY,
+                journal_entry_id TEXT NOT NULL,
+                account_code TEXT NOT NULL,
+                debit_cents INTEGER NOT NULL,
+                credit_cents INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(journal_entry_id) REFERENCES journal_entries(id) ON DELETE CASCADE,
+                FOREIGN KEY(account_code) REFERENCES accounts(code)
+             );"
+        ),
+        (
+            10,
+            "INSERT INTO accounts (code, name, type) VALUES ('1010', 'Cash', 'Asset');
+             INSERT INTO accounts (code, name, type) VALUES ('1020', 'Bank / Electronic', 'Asset');
+             INSERT INTO accounts (code, name, type) VALUES ('1200', 'Inventory Asset', 'Asset');
+             INSERT INTO accounts (code, name, type) VALUES ('2000', 'Accounts Payable', 'Liability');
+             INSERT INTO accounts (code, name, type) VALUES ('2100', 'Payroll Payable', 'Liability');
+             INSERT INTO accounts (code, name, type) VALUES ('3000', 'Retained Earnings', 'Equity');
+             INSERT INTO accounts (code, name, type) VALUES ('4000', 'Sales Revenue', 'Revenue');
+             INSERT INTO accounts (code, name, type) VALUES ('4100', 'Sales Returns & Allowances', 'Revenue');
+             INSERT INTO accounts (code, name, type) VALUES ('5000', 'Cost of Goods Sold', 'Expense');
+             INSERT INTO accounts (code, name, type) VALUES ('6000', 'Payroll Expense', 'Expense');
+             INSERT INTO accounts (code, name, type) VALUES ('6100', 'General Operations Expense', 'Expense');"
+        ),
+        (
+            11,
+            "CREATE TABLE employees (
+                id TEXT PRIMARY KEY,
+                user_id TEXT,
+                name TEXT NOT NULL,
+                email TEXT,
+                phone TEXT,
+                base_salary_cents INTEGER NOT NULL DEFAULT 0,
+                commission_rate REAL NOT NULL DEFAULT 0.0,
+                status TEXT NOT NULL DEFAULT 'Active',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+             );
+             CREATE TABLE attendance (
+                id TEXT PRIMARY KEY,
+                employee_id TEXT NOT NULL,
+                clock_in TEXT NOT NULL,
+                clock_out TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE CASCADE
+             );
+             CREATE TABLE payroll_runs (
+                id TEXT PRIMARY KEY,
+                employee_id TEXT NOT NULL,
+                period_start TEXT NOT NULL,
+                period_end TEXT NOT NULL,
+                base_pay_cents INTEGER NOT NULL,
+                commission_pay_cents INTEGER NOT NULL,
+                total_pay_cents INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'Draft',
+                paid_at TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(employee_id) REFERENCES employees(id) ON DELETE CASCADE
+             );"
+        ),
+        (
+            12,
+            "INSERT OR IGNORE INTO employees (id, user_id, name, email, phone, base_salary_cents, commission_rate, status, created_at)
+             VALUES ('emp-1', 'u1', 'Super User', 'admin@storeos.com', '555-0100', 500000, 0.0, 'Active', '2026-07-10T15:50:00Z');
+             INSERT OR IGNORE INTO employees (id, user_id, name, email, phone, base_salary_cents, commission_rate, status, created_at)
+             VALUES ('emp-2', 'u2', 'Emily Watson', 'emily@storeos.com', '555-0102', 300000, 0.02, 'Active', '2026-07-10T15:50:00Z');
+             INSERT OR IGNORE INTO employees (id, user_id, name, email, phone, base_salary_cents, commission_rate, status, created_at)
+             VALUES ('emp-3', 'u3', 'Arthur Dent', 'arthur@storeos.com', '555-0103', 400000, 0.0, 'Active', '2026-07-10T15:50:00Z');"
+        ),
+        (
+            13,
+            "ALTER TABLE employees ADD COLUMN pay_type TEXT NOT NULL DEFAULT 'Monthly';"
+        ),
     ];
 
     for (version, sql) in migrations {

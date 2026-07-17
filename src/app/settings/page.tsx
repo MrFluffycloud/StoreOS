@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getSettings, setSetting, resetStore, listSystemPrinters, getProducts, listInventoryMovements, getSuppliers, getUsers, verifyLicenseKey, replicateTable } from "@/lib/ipc";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Settings, Save, Check, Printer, User, ShieldAlert, Cloud, CheckCircle2, AlertCircle, ArrowRight, Lock, Database, RefreshCw, Trash2, Settings2 } from "lucide-react";
+import { Settings, Save, Check, Printer, User, ShieldAlert, Cloud, CheckCircle2, AlertCircle, ArrowRight, Lock, Database, RefreshCw, Trash2, Settings2, Sparkles } from "lucide-react";
 import { useAuth } from "@/components/layout/app-layout";
 import UserAccountsManager from "@/components/features/settings/user-accounts";
 import { printPOSReceipt } from "@/lib/printer";
@@ -21,7 +21,11 @@ export default function SettingsPage() {
   const role = session?.role || "Admin";
   const { showAlert, showConfirm, showPrompt } = useAlerts();
 
-  const [activeTab, setActiveTab] = useState<"shop" | "users" | "receipt" | "sync">("shop");
+  const [activeTab, setActiveTab] = useState<"shop" | "users" | "receipt" | "sync" | "ai">("shop");
+
+  // Gemini AI settings states
+  const [geminiApiKey, setGeminiApiKey] = useState("");
+  const [geminiModel, setGeminiModel] = useState("gemini-2.5-flash-lite");
 
   const { data: dbSettings = [], refetch } = useQuery({
     queryKey: ["settings"],
@@ -132,6 +136,15 @@ export default function SettingsPage() {
       setSupabaseSyncEnabled(sEnabled);
       setLicenseKey(sLicense);
       setStoreId(sStoreId);
+
+      // Load Gemini settings
+      const gApiKey = dbSettings.find((s) => s.key === "gemini_api_key")?.value || "";
+      let gModel = dbSettings.find((s) => s.key === "gemini_model")?.value || "gemini-2.5-flash-lite";
+      if (gModel === "gemini-2.5-flash") {
+        gModel = "gemini-2.5-flash-lite";
+      }
+      setGeminiApiKey(gApiKey);
+      setGeminiModel(gModel);
     }
   }, [dbSettings]);
 
@@ -250,6 +263,9 @@ export default function SettingsPage() {
         await setSetting("supabase_url", supabaseUrl);
         await setSetting("supabase_key", supabaseKey);
         await setSetting("supabase_sync_enabled", supabaseSyncEnabled);
+      } else if (activeTab === "ai") {
+        await setSetting("gemini_api_key", geminiApiKey);
+        await setSetting("gemini_model", geminiModel);
       }
       
       await refetch();
@@ -261,7 +277,13 @@ export default function SettingsPage() {
       
       toast.success("Settings Saved", {
         description: `Successfully updated the ${
-          activeTab === "shop" ? "General Store" : activeTab === "receipt" ? "Receipt Printer" : "Cloud Sync"
+          activeTab === "shop" 
+            ? "General Store" 
+            : activeTab === "receipt" 
+            ? "Receipt Printer" 
+            : activeTab === "ai" 
+            ? "AI Settings" 
+            : "Cloud Sync"
         } configuration.`,
       });
     } catch (err: any) {
@@ -390,6 +412,16 @@ export default function SettingsPage() {
             }`}
           >
             Cloud Sync
+          </button>
+          <button
+            onClick={() => setActiveTab("ai")}
+            className={`pb-2.5 text-xs font-semibold uppercase tracking-wider transition-all border-b-2 ${
+              activeTab === "ai"
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            AI Settings
           </button>
         </div>
 
@@ -1171,6 +1203,81 @@ export default function SettingsPage() {
                 )}
               </div>
             )}
+          </div>
+        ) : activeTab === "ai" ? (
+          <div className="max-w-2xl space-y-6 select-none">
+            <Card className="border border-border bg-card shadow-sm">
+              <CardHeader className="border-b border-border/55 pb-4">
+                <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-primary animate-pulse" /> Google Gemini AI Integration
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <form onSubmit={handleSave} className="space-y-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="geminiApiKey" className="text-xs font-semibold text-foreground flex items-center justify-between">
+                      <span>Gemini API Key</span>
+                      {geminiApiKey ? (
+                        <span className="text-[10px] text-emerald-500 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Configured Locally
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-amber-500 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" /> API Key Missing
+                        </span>
+                      )}
+                    </Label>
+                    <Input
+                      id="geminiApiKey"
+                      type="password"
+                      value={geminiApiKey}
+                      onChange={(e) => setGeminiApiKey(e.target.value)}
+                      placeholder="e.g. AIzaSy..."
+                      className="h-9 text-xs"
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      Your API key is stored securely in your local database. It is never transmitted to anyone except Google's Gemini servers during requests.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="geminiModel" className="text-xs font-semibold text-foreground">Gemini Model</Label>
+                    <select
+                      id="geminiModel"
+                      value={geminiModel}
+                      onChange={(e) => setGeminiModel(e.target.value)}
+                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
+                    >
+                      <option value="gemini-2.5-flash-lite" className="bg-background text-foreground">Gemini 2.5 Flash Lite (Recommended - Fast & Budget)</option>
+                      <option value="gemini-3.1-flash-lite" className="bg-background text-foreground">Gemini 3.1 Flash Lite (Sleek - Low latency)</option>
+                      <option value="gemini-3.5-flash" className="bg-background text-foreground">Gemini 3.5 Flash (Frontier - Agentic & Coding)</option>
+                      <option value="gemini-2.5-pro" className="bg-background text-foreground">Gemini 2.5 Pro (Deep Reasoning)</option>
+                    </select>
+                    <p className="text-[10px] text-muted-foreground">
+                      We recommend Gemini 2.5 Flash Lite or Gemini 3.1 Flash Lite for fast and cost-effective operations.
+                    </p>
+                  </div>
+
+                  <div className="flex justify-end pt-4 border-t border-border/40 gap-3">
+                    <Button
+                      type="submit"
+                      disabled={saving}
+                      className="h-8.5 text-xs font-semibold flex items-center gap-1.5"
+                    >
+                      {saving ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-3.5 h-3.5" /> Save AI Configuration
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
           </div>
         ) : null}
       </div>

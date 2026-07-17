@@ -45,8 +45,8 @@ export const hasPermission = (role: string, path: string): boolean => {
   }
   
   if (role === "Auditor") {
-    // Auditors only have access to overview analytics, stock tracking, suppliers, purchases, returns, and reports
-    return ["/dashboard", "/products", "/inventory", "/suppliers", "/purchases", "/returns", "/reports"].includes(path);
+    // Auditors only have access to overview analytics, stock tracking, suppliers, purchases, returns, reports, and finance ledger
+    return ["/dashboard", "/products", "/inventory", "/suppliers", "/purchases", "/returns", "/reports", "/finance"].includes(path);
   }
   
   return false;

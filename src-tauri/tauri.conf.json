@@ -5,7 +5,7 @@
 	"identifier": "com.storeos.erp",
 	"build": {
 		"frontendDist": "../out",
-		"devUrl": "http://localhost:3001",
+		"devUrl": "http://localhost:3000",
 		"beforeDevCommand": "npm run dev",
 		"beforeBuildCommand": "npm run build"
 	},
@@ -13,8 +13,8 @@
 		"windows": [
 			{
 				"title": "StoreOS",
-				"width": 400,
-				"height": 550,
+				"width": 1280,
+				"height": 800,
 				"resizable": false,
 				"fullscreen": false
 			}

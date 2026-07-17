@@ -719,7 +719,7 @@ export default function SalesPage() {
             movementType: "Sale",
             referenceType: "POSReceipt",
             referenceId: recRefId,
-            employeeId: "system",
+            employeeId: session?.username || "system",
           });
         }
 

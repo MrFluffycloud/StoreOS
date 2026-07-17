@@ -290,5 +290,104 @@ export const getAppVersion = async (): Promise<string> => {
   return "0.1.4";
 };
 
+export const callGemini = (contentsJson: string, systemInstruction?: string) =>
+  safeInvoke<string>(
+    "call_gemini",
+    { contentsJson, systemInstruction },
+    "Mocked Gemini response: Database context analyzed. Please configure your Gemini API Key in Settings and launch the Tauri app to interact with the real Gemini model."
+  );
+
+// Finance & Double-Entry Accounting
+export const getAccounts = () =>
+  safeInvoke<any[]>("get_accounts", {}, [
+    { code: "1010", name: "Cash", type: "Asset" },
+    { code: "1020", name: "Bank / Electronic", type: "Asset" },
+    { code: "1200", name: "Inventory Asset", type: "Asset" },
+    { code: "2000", name: "Accounts Payable", type: "Liability" },
+    { code: "2100", name: "Payroll Payable", type: "Liability" },
+    { code: "4000", name: "Sales Revenue", type: "Revenue" },
+    { code: "5000", name: "Cost of Goods Sold", type: "Expense" },
+    { code: "6000", name: "Payroll Expense", type: "Expense" }
+  ]);
+
+export const getJournalEntries = () =>
+  safeInvoke<any[]>("get_journal_entries", {}, []);
+
+export const createManualJournalEntry = (input: any) =>
+  safeInvoke<string>("create_manual_journal_entry", { input }, "mock-entry-id");
+
+export const updateManualJournalEntry = (id: string, input: any) =>
+  safeInvoke<void>("update_manual_journal_entry", { id, input }, undefined);
+
+export const deleteJournalEntry = (id: string) =>
+  safeInvoke<void>("delete_journal_entry", { id }, undefined);
+
+export const getBalanceSheet = () =>
+  safeInvoke<any>("get_balance_sheet", {}, {
+    assets: [{ code: "1010", name: "Cash", balanceCents: 100000 }],
+    liabilities: [],
+    equity: [{ code: "3100", name: "Current Net Profit (YTD)", balanceCents: 100000 }],
+    totalAssetsCents: 100000,
+    totalLiabilitiesCents: 0,
+    totalEquityCents: 100000
+  });
+
+export const getProfitLoss = () =>
+  safeInvoke<any>("get_profit_loss", {}, {
+    revenues: [{ code: "4000", name: "Sales Revenue", balanceCents: 150000 }],
+    expenses: [{ code: "5000", name: "Cost of Goods Sold", balanceCents: 50000 }],
+    totalRevenueCents: 150000,
+    totalExpenseCents: 50000,
+    netIncomeCents: 100000
+  });
+
+// HR & Payroll
+export const getEmployees = () =>
+  safeInvoke<any[]>("get_employees", {}, [
+    { id: "emp-1", name: "Super User", baseSalaryCents: 500000, commissionRate: 0.0, status: "Active", payType: "Monthly", createdAt: new Date().toISOString() },
+    { id: "emp-2", name: "Emily Watson", baseSalaryCents: 300000, commissionRate: 0.02, status: "Active", payType: "Monthly", createdAt: new Date().toISOString() }
+  ]);
+
+export const createEmployee = (input: any) =>
+  safeInvoke<any>("create_employee", { input }, { id: "new-emp-id", ...input, status: "Active", createdAt: new Date().toISOString() });
+
+export const updateEmployee = (id: string, name: string, email: string | null, phone: string | null, baseSalaryCents: number, commissionRate: number, payType: string, status: string) =>
+  safeInvoke<void>("update_employee", { id, name, email, phone, baseSalaryCents, commissionRate, payType, status });
+
+export const getAttendanceLogs = () =>
+  safeInvoke<any[]>("get_attendance_logs", {}, []);
+
+export const clockInOut = (employeeId: string) =>
+  safeInvoke<string>("clock_in_out", { employeeId }, "Clocked In");
+
+export const getCurrentAttendanceStatus = (employeeId: string) =>
+  safeInvoke<boolean>("get_current_attendance_status", { employeeId }, false);
+
+export const listPayrollRuns = () =>
+  safeInvoke<any[]>("list_payroll_runs", {}, []);
+
+export const generatePayrollRun = (employeeId: string, periodStart: string, periodEnd: string) =>
+  safeInvoke<any>("generate_payroll_run", { employeeId, periodStart, periodEnd }, {
+    id: "payroll-mock-id",
+    employeeId,
+    employeeName: "Emily Watson",
+    periodStart,
+    periodEnd,
+    basePayCents: 300000,
+    commissionPayCents: 5000,
+    totalPayCents: 305000,
+    status: "Draft",
+    paidAt: null,
+    createdAt: new Date().toISOString()
+  });
+
+export const payPayrollRun = (runId: string) =>
+  safeInvoke<void>("pay_payroll_run", { runId });
+
+export const runAutoPayroll = () =>
+  safeInvoke<string | null>("run_auto_payroll", {}, null);
+
+
+
 
 

@@ -30,6 +30,9 @@ const navItems = [
   { label: "Products", href: "/products", icon: Package },
   { label: "Inventory", href: "/inventory", icon: History },
   { label: "Reports", href: "/reports", icon: BarChart3 },
+  { label: "Finance", href: "/finance", icon: CreditCard },
+  { label: "HR & Payroll", href: "/hr", icon: UserCheck },
+  { label: "AI Advisor", href: "/ai-advisor", icon: Sparkles },
   { label: "Suppliers", href: "/suppliers", icon: Truck },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
