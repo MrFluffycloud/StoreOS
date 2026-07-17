@@ -120,24 +120,24 @@ export default function ReportsPage() {
 
   // 3. Daily Sales Bar Chart data
   const getDailyData = () => {
-    const daysMap = new Map<string, number>();
+    const daysMap = new Map<number, number>();
 
-    // Group movements by date
+    // Group movements by date (start-of-day timestamp)
     filteredMovements.forEach((m) => {
       if (m.movementType !== "Sale" && m.movementType !== "SalesReturn") return;
       const prod = productMap.get(m.productId);
       if (!prod) return;
 
       const dateObj = new Date(m.timestamp);
-      // Format consistently using en-US to avoid locale-specific differences
-      const dateStr = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      dateObj.setHours(0, 0, 0, 0);
+      const dayTimestamp = dateObj.getTime();
       
       const amt = Math.abs(m.quantity) * prod.priceCents;
-      const current = daysMap.get(dateStr) || 0;
+      const current = daysMap.get(dayTimestamp) || 0;
       if (m.movementType === "Sale") {
-        daysMap.set(dateStr, current + amt);
+        daysMap.set(dayTimestamp, current + amt);
       } else {
-        daysMap.set(dateStr, current - amt);
+        daysMap.set(dayTimestamp, current - amt);
       }
     });
 
@@ -147,31 +147,58 @@ export default function ReportsPage() {
       for (let i = limit - 1; i >= 0; i--) {
         const d = new Date();
         d.setDate(d.getDate() - i);
-        const dateStr = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-        if (!daysMap.has(dateStr)) {
-          daysMap.set(dateStr, 0);
+        d.setHours(0, 0, 0, 0);
+        const dayTimestamp = d.getTime();
+        if (!daysMap.has(dayTimestamp)) {
+          daysMap.set(dayTimestamp, 0);
+        }
+      }
+    } else {
+      // For "all" time, pre-fill all intermediate empty dates from oldest movement to today
+      if (filteredMovements.length > 0) {
+        let oldestDate = new Date();
+        filteredMovements.forEach((m) => {
+          const d = new Date(m.timestamp);
+          if (d < oldestDate) {
+            oldestDate = d;
+          }
+        });
+        
+        const temp = new Date(oldestDate.getTime());
+        temp.setHours(0, 0, 0, 0);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const dayLimit = 365; // Safe maximum to prevent browser freeze on very old database
+        let dayCount = 0;
+        
+        while (temp <= today && dayCount < dayLimit) {
+          const dayTimestamp = temp.getTime();
+          if (!daysMap.has(dayTimestamp)) {
+            daysMap.set(dayTimestamp, 0);
+          }
+          temp.setDate(temp.getDate() + 1);
+          dayCount++;
+        }
+      } else {
+        // Default to last 7 days if no transactions
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date();
+          d.setDate(d.getDate() - i);
+          d.setHours(0, 0, 0, 0);
+          const dayTimestamp = d.getTime();
+          if (!daysMap.has(dayTimestamp)) {
+            daysMap.set(dayTimestamp, 0);
+          }
         }
       }
     }
 
-    // Convert map to array and sort chronologically
-    const dateSorted = Array.from(daysMap.entries()).map(([date, val]) => {
-      // Find a matching movement timestamp for this date to sort correctly
-      const match = filteredMovements.find(m => {
-        const dStr = new Date(m.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-        return dStr === date;
-      });
-      
-      let timestamp = 0;
-      if (match) {
-        timestamp = new Date(match.timestamp).getTime();
-      } else {
-        // For pre-filled dates with no sales, calculate their approximate timestamp
-        const parsed = Date.parse(`${date}, ${new Date().getFullYear()}`);
-        timestamp = isNaN(parsed) ? 0 : parsed;
-      }
-
-      return { date, sales: Math.max(0, val / 100), timestamp };
+    // Convert map to array, format date labels, and sort chronologically
+    const dateSorted = Array.from(daysMap.entries()).map(([timestamp, val]) => {
+      const dateObj = new Date(timestamp);
+      const dateStr = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      return { date: dateStr, sales: Math.max(0, val / 100), timestamp };
     });
 
     return dateSorted
