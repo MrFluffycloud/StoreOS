@@ -471,7 +471,7 @@ export default function ReportsPage() {
                             height: `${heightPercent}%`, 
                             backgroundColor: d.sales > 0 ? "var(--primary)" : "var(--muted)" 
                           }}
-                          className={`w-full rounded-t transition-all duration-300 relative overflow-hidden cursor-pointer ${
+                          className={`w-3.5 rounded-t transition-all duration-300 relative overflow-hidden cursor-pointer ${
                             d.sales > 0 ? "opacity-80 hover:opacity-100" : "opacity-30 hover:opacity-50"
                           }`}
                         >
