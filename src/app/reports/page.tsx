@@ -18,6 +18,20 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/components/layout/app-layout";
 import { useAlerts } from "@/components/providers/alert-provider";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
+
+const chartConfig = {
+  sales: {
+    label: "Sales",
+    color: "var(--primary)",
+  },
+} satisfies ChartConfig;
 
 type DateRange = "today" | "7days" | "30days" | "all";
 
@@ -456,34 +470,49 @@ export default function ReportsPage() {
                 <CardTitle className="text-xs font-bold uppercase tracking-wider text-foreground">Sales Trend</CardTitle>
               </CardHeader>
               <CardContent className="p-6">
-                <div className="h-44 w-full flex items-end justify-between gap-2.5">
-                  {chartData.map((d, idx) => {
-                    const heightPercent = Math.max(8, Math.round((d.sales / maxSales) * 100));
-                    return (
-                      <div key={idx} className="h-full flex-1 flex flex-col justify-end items-center group relative">
-                        {/* Tooltip */}
-                        <div className="absolute bottom-[calc(100%+8px)] bg-popover border border-border px-2 py-1 rounded text-[9px] font-mono shadow-md text-popover-foreground scale-0 group-hover:scale-100 transition-all origin-bottom pointer-events-none whitespace-nowrap z-10">
-                          {formatPrice(Math.round(d.sales * 100))}
-                        </div>
-                        {/* Bar */}
-                        <div
-                          style={{ 
-                            height: `${heightPercent}%`, 
-                            backgroundColor: d.sales > 0 ? "var(--primary)" : "var(--muted)" 
-                          }}
-                          className={`w-3.5 rounded-t transition-all duration-300 relative overflow-hidden cursor-pointer ${
-                            d.sales > 0 ? "opacity-80 hover:opacity-100" : "opacity-30 hover:opacity-50"
-                          }`}
-                        >
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                        {/* Date label */}
-                        <span className="text-[8px] text-muted-foreground mt-2 font-mono font-medium truncate w-full text-center">
-                          {d.date}
-                        </span>
-                      </div>
-                    );
-                  })}
+                <div className="h-44 w-full">
+                  <ChartContainer config={chartConfig} className="h-full w-full">
+                    <BarChart
+                      data={chartData}
+                      margin={{ top: 10, right: 0, left: -10, bottom: 0 }}
+                    >
+                      <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-border/40" />
+                      <XAxis
+                        dataKey="date"
+                        tickLine={false}
+                        tickMargin={8}
+                        axisLine={false}
+                        className="text-[9px] font-mono font-medium fill-muted-foreground"
+                      />
+                      <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        width={45}
+                        className="text-[9px] font-mono font-medium fill-muted-foreground"
+                        tickFormatter={(val) => formatPrice(val * 100).replace(".00", "")}
+                      />
+                      <ChartTooltip
+                        cursor={{ fill: "var(--muted)", opacity: 0.15 }}
+                        content={
+                          <ChartTooltipContent
+                            labelFormatter={(value) => `${value}`}
+                            formatter={(value) => [
+                              <span className="font-mono font-bold text-foreground">
+                                {formatPrice(Math.round(Number(value) * 100))}
+                              </span>,
+                              <span className="text-[10px] text-muted-foreground uppercase font-bold">Sales</span>
+                            ]}
+                          />
+                        }
+                      />
+                      <Bar
+                        dataKey="sales"
+                        fill="var(--color-sales)"
+                        radius={[4, 4, 0, 0]}
+                        maxBarSize={16}
+                      />
+                    </BarChart>
+                  </ChartContainer>
                 </div>
               </CardContent>
             </Card>
