@@ -18,6 +18,7 @@ import { ThemeColorProvider } from "@/components/providers/theme-color-provider"
 import { AlertProvider } from "@/components/providers/alert-provider";
 import AppLayout from "@/components/layout/app-layout";
 import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -70,10 +71,12 @@ export default function RootLayout({
         >
           <QueryProvider>
             <ThemeColorProvider>
-              <AlertProvider>
-                <AppLayout>{children}</AppLayout>
-                <Toaster closeButton position="bottom-right" />
-              </AlertProvider>
+              <TooltipProvider>
+                <AlertProvider>
+                  <AppLayout>{children}</AppLayout>
+                  <Toaster closeButton position="bottom-right" />
+                </AlertProvider>
+              </TooltipProvider>
             </ThemeColorProvider>
           </QueryProvider>
         </ThemeProvider>

@@ -440,10 +440,15 @@ export default function ReportsPage() {
                         </div>
                         {/* Bar */}
                         <div
-                          style={{ height: `${heightPercent}%` }}
-                          className="w-full bg-primary/20 hover:bg-primary/95 rounded-t transition-all duration-300 relative overflow-hidden cursor-pointer"
+                          style={{ 
+                            height: `${heightPercent}%`, 
+                            backgroundColor: d.sales > 0 ? "var(--primary)" : "var(--muted)" 
+                          }}
+                          className={`w-full rounded-t transition-all duration-300 relative overflow-hidden cursor-pointer ${
+                            d.sales > 0 ? "opacity-80 hover:opacity-100" : "opacity-30 hover:opacity-50"
+                          }`}
                         >
-                          <div className="absolute inset-0 bg-gradient-to-t from-primary/5 to-primary/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>
                         {/* Date label */}
                         <span className="text-[8px] text-muted-foreground mt-2 font-mono font-medium truncate w-full text-center">

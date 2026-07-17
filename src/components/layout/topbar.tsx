@@ -14,9 +14,11 @@ import {
   RefreshCw,
   Wifi,
   WifiOff,
+  AlertCircle,
 } from "lucide-react";
 import { getSettings, syncDatabase } from "@/lib/ipc";
 import { performDatabaseSync } from "@/lib/syncEngine";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 interface TopbarProps {
   onSearchClick: () => void;
@@ -95,61 +97,89 @@ export default function Topbar({ onSearchClick, currentUser, currentRole, onLogo
       {/* Action group */}
       <div className="flex items-center gap-3">
         {/* Internet Connection Status Marker */}
-        <div
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-mono font-medium transition-all ${
-            isOnline
-              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-              : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20 animate-pulse"
-          }`}
-          title={isOnline ? "Connected to Internet" : "No Internet Connection"}
-        >
-          {isOnline ? (
-            <>
-              <Wifi className="w-3 h-3 text-emerald-500" />
-              <span>Online</span>
-            </>
-          ) : (
-            <>
-              <WifiOff className="w-3 h-3 text-rose-500" />
-              <span>Offline</span>
-            </>
-          )}
-        </div>
+        <Tooltip>
+          <TooltipTrigger render={
+            <div
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-mono font-medium transition-all cursor-default ${
+                isOnline
+                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                  : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20 animate-pulse"
+              }`}
+            />
+          }>
+            {isOnline ? (
+              <>
+                <Wifi className="w-3 h-3 text-emerald-500" />
+                <span>Online</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="w-3 h-3 text-rose-500" />
+                <span>Offline</span>
+              </>
+            )}
+          </TooltipTrigger>
+          <TooltipContent className="border border-border bg-popover text-popover-foreground text-[10px] font-semibold px-2 py-1 rounded shadow-md">
+            {isOnline ? "Connected to Internet" : "No Internet Connection"}
+          </TooltipContent>
+        </Tooltip>
 
         {/* Sync Trigger / Indicator — only shown when Cloud Sync is activated/configured */}
         {hasLicense && (
           syncEnabled ? (
-            <button
-              onClick={() => {
-                if (!isSyncing && isOnline) {
-                  syncMutation.mutate();
-                }
-              }}
-              disabled={isSyncing || !isOnline}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-mono font-medium transition-all ${
-                isSyncing
-                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
-                  : !isOnline
-                  ? "bg-zinc-500/10 text-zinc-500 border-zinc-500/10 opacity-50 cursor-not-allowed"
-                  : "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20 hover:bg-sky-500/20"
-              }`}
-              title={!isOnline ? "Sync disabled (Offline)" : `Last Sync: ${formatLastSync(lastSyncTime)}`}
-            >
-              {isSyncing ? (
-                <RefreshCw className="w-3 h-3 animate-spin" />
-              ) : (
-                <Database className="w-3 h-3" />
-              )}
-              <span>{isSyncing ? "Syncing..." : "Cloud Synced"}</span>
-            </button>
+            <Tooltip>
+              <TooltipTrigger render={
+                <button
+                  onClick={() => {
+                    if (!isSyncing && isOnline) {
+                      syncMutation.mutate();
+                    }
+                  }}
+                  disabled={isSyncing || !isOnline}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-mono font-medium transition-all ${
+                    isSyncing
+                      ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                      : syncStatus === "Sync Error"
+                      ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20 hover:bg-rose-500/20"
+                      : !isOnline || syncStatus.includes("Offline")
+                      ? "bg-zinc-500/10 text-zinc-500 border-zinc-500/10 opacity-50 cursor-not-allowed"
+                      : "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20 hover:bg-sky-500/20"
+                  }`}
+                />
+              }>
+                {isSyncing ? (
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                ) : syncStatus === "Sync Error" ? (
+                  <AlertCircle className="w-3 h-3 text-rose-500 animate-pulse" />
+                ) : (
+                  <Database className="w-3 h-3" />
+                )}
+                <span>
+                  {isSyncing 
+                    ? "Syncing..." 
+                    : syncStatus === "Synced" 
+                    ? "Cloud Synced" 
+                    : syncStatus}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="border border-border bg-popover text-popover-foreground text-[10px] font-semibold px-2 py-1 rounded shadow-md">
+                {!isOnline ? "Sync disabled (Offline)" : `Status: ${syncStatus} | Last Sync: ${formatLastSync(lastSyncTime)} (Click to sync now)`}
+              </TooltipContent>
+            </Tooltip>
           ) : (
-            <div
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-zinc-700/50 bg-zinc-800/10 text-zinc-500 dark:text-zinc-400 text-[10px] font-mono font-medium select-none"
-              title="Cloud sync is temporarily paused in settings."
-            >
-              <Database className="w-3 h-3 opacity-60" />
-              <span>Sync Paused</span>
-            </div>
+            <Tooltip>
+              <TooltipTrigger render={
+                <div
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-zinc-700/50 bg-zinc-800/10 text-zinc-500 dark:text-zinc-400 text-[10px] font-mono font-medium select-none cursor-default"
+                />
+              }>
+                <Database className="w-3 h-3 opacity-60" />
+                <span>Sync Paused</span>
+              </TooltipTrigger>
+              <TooltipContent className="border border-border bg-popover text-popover-foreground text-[10px] font-semibold px-2 py-1 rounded shadow-md">
+                Cloud sync is temporarily paused in settings.
+              </TooltipContent>
+            </Tooltip>
           )
         )}
 
