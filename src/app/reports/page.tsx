@@ -497,10 +497,10 @@ export default function ReportsPage() {
                           <ChartTooltipContent
                             labelFormatter={(value) => `${value}`}
                             formatter={(value) => [
-                              <span className="font-mono font-bold text-foreground">
+                              <span key="sales-value" className="font-mono font-bold text-foreground">
                                 {formatPrice(Math.round(Number(value) * 100))}
                               </span>,
-                              <span className="text-[10px] text-muted-foreground uppercase font-bold">Sales</span>
+                              <span key="sales-label" className="text-[10px] text-muted-foreground uppercase font-bold">Sales</span>
                             ]}
                           />
                         }

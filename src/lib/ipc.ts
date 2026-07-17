@@ -12,7 +12,11 @@ async function safeInvoke<T>(cmd: string, args?: Record<string, any>, fallbackDa
       const { invoke } = await import("@tauri-apps/api/core");
       return await invoke<T>(cmd, args);
     } catch (error) {
-      console.error(`Tauri invoke error for cmd "${cmd}":`, error);
+      if (cmd === "sync_database") {
+        console.warn(`Tauri sync database failed (expected when offline or credentials missing):`, error);
+      } else {
+        console.error(`Tauri invoke error for cmd "${cmd}":`, error);
+      }
       throw error;
     }
   } else {

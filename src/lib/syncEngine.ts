@@ -38,7 +38,7 @@ export async function performDatabaseSync() {
       hasActiveSyncError = false;
     }
   } catch (err: any) {
-    console.error("Cloud Sync background worker failed:", err);
+    console.warn("Cloud Sync background worker failed (network drop or host offline):", err);
     // Only alert on initial transition to error state to avoid spamming the user
     if (!hasActiveSyncError) {
       toast.error("Cloud Sync Failed", {
