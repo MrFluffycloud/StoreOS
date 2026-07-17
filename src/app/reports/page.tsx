@@ -460,7 +460,7 @@ export default function ReportsPage() {
                   {chartData.map((d, idx) => {
                     const heightPercent = Math.max(8, Math.round((d.sales / maxSales) * 100));
                     return (
-                      <div key={idx} className="flex-1 flex flex-col items-center group relative">
+                      <div key={idx} className="h-full flex-1 flex flex-col justify-end items-center group relative">
                         {/* Tooltip */}
                         <div className="absolute bottom-[calc(100%+8px)] bg-popover border border-border px-2 py-1 rounded text-[9px] font-mono shadow-md text-popover-foreground scale-0 group-hover:scale-100 transition-all origin-bottom pointer-events-none whitespace-nowrap z-10">
                           {formatPrice(Math.round(d.sales * 100))}
