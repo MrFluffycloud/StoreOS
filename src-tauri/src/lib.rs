@@ -72,6 +72,8 @@ pub fn run() {
             commands::ai::list_ai_models,
             commands::health::get_system_health,
             commands::finance::get_accounts,
+            commands::finance::create_account,
+            commands::finance::get_account_ledger,
             commands::finance::get_journal_entries,
             commands::finance::create_manual_journal_entry,
             commands::finance::update_manual_journal_entry,

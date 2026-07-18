@@ -201,7 +201,7 @@ export interface SystemHealth {
 }
 
 export const getSystemHealth = () => safeInvoke<SystemHealth>("get_system_health", {}, {
-  app_version: "0.1.0",
+  app_version: "0.2.1",
   platform: "Web",
   arch: "wasm",
   db_size_bytes: 0,
@@ -284,10 +284,10 @@ export const getAppVersion = async (): Promise<string> => {
       return await getVersion();
     } catch (e) {
       console.error("Failed to get Tauri app version", e);
-      return "0.1.4";
+      return "0.2.1";
     }
   }
-  return "0.1.4";
+  return "0.2.1";
 };
 
 export const callGemini = (contentsJson: string, systemInstruction?: string) =>
@@ -301,17 +301,165 @@ export const listAiModels = () =>
   safeInvoke<string[]>("list_ai_models", {}, ["gpt-4.1", "gpt-4.1-mini", "deepseek-v3"]);
 
 // Finance & Double-Entry Accounting
+export interface Account {
+  code: string;
+  name: string;
+  type: "Asset" | "Liability" | "Equity" | "Revenue" | "Expense";
+}
+
+export interface CreateAccountInput {
+  code: string;
+  name: string;
+  type: "Asset" | "Liability" | "Equity" | "Revenue" | "Expense";
+}
+
+export interface AccountLedgerTransaction {
+  id: string;
+  journalEntryId: string;
+  timestamp: string;
+  referenceType: string;
+  referenceId: string;
+  description?: string;
+  debitCents: number;
+  creditCents: number;
+  runningBalanceCents: number;
+}
+
+export interface AccountLedgerDetails {
+  account: Account;
+  totalDebitCents: number;
+  totalCreditCents: number;
+  currentBalanceCents: number;
+  transactions: AccountLedgerTransaction[];
+}
+
+let mockAccountsList: Account[] = [
+  { code: "1010", name: "Cash", type: "Asset" },
+  { code: "1020", name: "Bank / Electronic", type: "Asset" },
+  { code: "1200", name: "Inventory Asset", type: "Asset" },
+  { code: "2000", name: "Accounts Payable", type: "Liability" },
+  { code: "2100", name: "Payroll Payable", type: "Liability" },
+  { code: "3000", name: "Retained Earnings", type: "Equity" },
+  { code: "4000", name: "Sales Revenue", type: "Revenue" },
+  { code: "4100", name: "Sales Returns & Allowances", type: "Revenue" },
+  { code: "5000", name: "Cost of Goods Sold", type: "Expense" },
+  { code: "6000", name: "Payroll Expense", type: "Expense" },
+  { code: "6100", name: "General Operations Expense", type: "Expense" },
+];
+
 export const getAccounts = () =>
-  safeInvoke<any[]>("get_accounts", {}, [
-    { code: "1010", name: "Cash", type: "Asset" },
-    { code: "1020", name: "Bank / Electronic", type: "Asset" },
-    { code: "1200", name: "Inventory Asset", type: "Asset" },
-    { code: "2000", name: "Accounts Payable", type: "Liability" },
-    { code: "2100", name: "Payroll Payable", type: "Liability" },
-    { code: "4000", name: "Sales Revenue", type: "Revenue" },
-    { code: "5000", name: "Cost of Goods Sold", type: "Expense" },
-    { code: "6000", name: "Payroll Expense", type: "Expense" }
-  ]);
+  safeInvoke<Account[]>("get_accounts", {}, mockAccountsList);
+
+export const createAccount = async (input: CreateAccountInput): Promise<Account> => {
+  if (isTauri()) {
+    return safeInvoke<Account>("create_account", { input });
+  } else {
+    const existing = mockAccountsList.find((a) => a.code === input.code);
+    if (existing) {
+      throw new Error(`Account code '${input.code}' already exists.`);
+    }
+    const newAcct: Account = {
+      code: input.code.trim(),
+      name: input.name.trim(),
+      type: input.type,
+    };
+    mockAccountsList.push(newAcct);
+    mockAccountsList.sort((a, b) => a.code.localeCompare(b.code));
+    return newAcct;
+  }
+};
+
+export const getAccountLedger = async (code: string): Promise<AccountLedgerDetails> => {
+  if (isTauri()) {
+    return safeInvoke<AccountLedgerDetails>("get_account_ledger", { code });
+  } else {
+    const acct = mockAccountsList.find((a) => a.code === code) || {
+      code,
+      name: code === "1010" ? "Cash" : "General Account",
+      type: "Asset" as const,
+    };
+
+    // Pre-populated mock transactions for browser preview
+    let rawTransactions: Array<{
+      id: string;
+      journalEntryId: string;
+      timestamp: string;
+      referenceType: string;
+      referenceId: string;
+      description?: string;
+      debitCents: number;
+      creditCents: number;
+    }> = [];
+
+    const now = new Date();
+    const ago = (hours: number) => new Date(now.getTime() - hours * 3600000).toISOString();
+
+    if (code === "1010") { // Cash Account
+      rawTransactions = [
+        { id: "tx-1", journalEntryId: "je-101", timestamp: ago(48), referenceType: "POS Sale", referenceId: "POS-1001", description: "Daily POS Register Cash Sales", debitCents: 45000, creditCents: 0 },
+        { id: "tx-2", journalEntryId: "je-102", timestamp: ago(36), referenceType: "POS Sale", referenceId: "POS-1002", description: "Counter Cash Transactions", debitCents: 32000, creditCents: 0 },
+        { id: "tx-3", journalEntryId: "je-103", timestamp: ago(24), referenceType: "Purchase", referenceId: "SUP-201", description: "Supplier Cash Purchase for Fresh Stock", debitCents: 0, creditCents: 12000 },
+        { id: "tx-4", journalEntryId: "je-104", timestamp: ago(18), referenceType: "Adjustment", referenceId: "MAN-001", description: "Petty Cash Store Maintenance Expense", debitCents: 0, creditCents: 3500 },
+        { id: "tx-5", journalEntryId: "je-105", timestamp: ago(12), referenceType: "POS Sale", referenceId: "POS-1003", description: "Customer Counter Cash Receipt", debitCents: 18500, creditCents: 0 },
+        { id: "tx-6", journalEntryId: "je-106", timestamp: ago(4), referenceType: "Bank Transfer", referenceId: "TRF-881", description: "Cash Deposit to Main Bank Account", debitCents: 0, creditCents: 30000 },
+      ];
+    } else if (code === "1020") { // Bank Account
+      rawTransactions = [
+        { id: "tx-b1", journalEntryId: "je-201", timestamp: ago(72), referenceType: "Opening", referenceId: "INIT-001", description: "Initial Bank Balance", debitCents: 500000, creditCents: 0 },
+        { id: "tx-b2", journalEntryId: "je-202", timestamp: ago(48), referenceType: "POS Batch", referenceId: "CARD-991", description: "Visa / Mastercard Daily Terminal Payout", debitCents: 125000, creditCents: 0 },
+        { id: "tx-b3", journalEntryId: "je-203", timestamp: ago(30), referenceType: "Purchase", referenceId: "PAY-402", description: "Vendor Electronic Bank Transfer", debitCents: 0, creditCents: 85000 },
+        { id: "tx-b4", journalEntryId: "je-204", timestamp: ago(10), referenceType: "Payroll", referenceId: "PAYROLL-771", description: "Employee Salary Direct Deposit Batch", debitCents: 0, creditCents: 150000 },
+        { id: "tx-b5", journalEntryId: "je-205", timestamp: ago(4), referenceType: "Bank Transfer", referenceId: "TRF-881", description: "Cash Deposit Received from Register", debitCents: 30000, creditCents: 0 },
+      ];
+    } else if (code === "4000") { // Sales Revenue
+      rawTransactions = [
+        { id: "tx-r1", journalEntryId: "je-101", timestamp: ago(48), referenceType: "POS Sale", referenceId: "POS-1001", description: "Cash Register Sales Revenue", debitCents: 0, creditCents: 45000 },
+        { id: "tx-r2", journalEntryId: "je-102", timestamp: ago(36), referenceType: "POS Sale", referenceId: "POS-1002", description: "Cash Sales Batch", debitCents: 0, creditCents: 32000 },
+        { id: "tx-r3", journalEntryId: "je-202", timestamp: ago(48), referenceType: "Card Sale", referenceId: "CARD-991", description: "Card Terminal Sales Revenue", debitCents: 0, creditCents: 125000 },
+        { id: "tx-r4", journalEntryId: "je-105", timestamp: ago(12), referenceType: "POS Sale", referenceId: "POS-1003", description: "Counter Sales Revenue", debitCents: 0, creditCents: 18500 },
+      ];
+    } else if (code === "1200") { // Inventory Asset
+      rawTransactions = [
+        { id: "tx-i1", journalEntryId: "je-301", timestamp: ago(96), referenceType: "Purchase", referenceId: "PO-1001", description: "Stock Purchase Receipt - Skillets & Knives", debitCents: 350000, creditCents: 0 },
+        { id: "tx-i2", journalEntryId: "je-101", timestamp: ago(48), referenceType: "COGS Deduction", referenceId: "POS-1001", description: "Inventory Valuation Outflow", debitCents: 0, creditCents: 18000 },
+        { id: "tx-i3", journalEntryId: "je-103", timestamp: ago(24), referenceType: "Purchase", referenceId: "SUP-201", description: "Supplier Stock Restock", debitCents: 12000, creditCents: 0 },
+      ];
+    } else if (code === "5000") { // COGS
+      rawTransactions = [
+        { id: "tx-c1", journalEntryId: "je-101", timestamp: ago(48), referenceType: "COGS", referenceId: "POS-1001", description: "Cost of Goods Sold - POS Batch", debitCents: 18000, creditCents: 0 },
+        { id: "tx-c2", journalEntryId: "je-102", timestamp: ago(36), referenceType: "COGS", referenceId: "POS-1002", description: "Cost of Goods Sold - Counter", debitCents: 14000, creditCents: 0 },
+        { id: "tx-c3", journalEntryId: "je-202", timestamp: ago(48), referenceType: "COGS", referenceId: "CARD-991", description: "Cost of Goods Sold - Card Terminal", debitCents: 55000, creditCents: 0 },
+      ];
+    }
+
+    const isDebitNormal = acct.type === "Asset" || acct.type === "Expense";
+    let runningBalanceCents = 0;
+    let totalDebitCents = 0;
+    let totalCreditCents = 0;
+
+    const processedTx: AccountLedgerTransaction[] = rawTransactions.map((tx) => {
+      totalDebitCents += tx.debitCents;
+      totalCreditCents += tx.creditCents;
+      if (isDebitNormal) {
+        runningBalanceCents += tx.debitCents - tx.creditCents;
+      } else {
+        runningBalanceCents += tx.creditCents - tx.debitCents;
+      }
+      return {
+        ...tx,
+        runningBalanceCents,
+      };
+    });
+
+    return {
+      account: acct,
+      totalDebitCents,
+      totalCreditCents,
+      currentBalanceCents: runningBalanceCents,
+      transactions: processedTx,
+    };
+  }
+};
 
 export const getJournalEntries = () =>
   safeInvoke<any[]>("get_journal_entries", {}, []);
@@ -327,22 +475,35 @@ export const deleteJournalEntry = (id: string) =>
 
 export const getBalanceSheet = () =>
   safeInvoke<any>("get_balance_sheet", {}, {
-    assets: [{ code: "1010", name: "Cash", balanceCents: 100000 }],
-    liabilities: [],
-    equity: [{ code: "3100", name: "Current Net Profit (YTD)", balanceCents: 100000 }],
-    totalAssetsCents: 100000,
-    totalLiabilitiesCents: 0,
-    totalEquityCents: 100000
+    assets: [
+      { code: "1010", name: "Cash", balanceCents: 50000 },
+      { code: "1020", name: "Bank / Electronic", balanceCents: 390000 },
+      { code: "1200", name: "Inventory Asset", balanceCents: 344000 }
+    ],
+    liabilities: [
+      { code: "2000", name: "Accounts Payable", balanceCents: 85000 }
+    ],
+    equity: [
+      { code: "3000", name: "Retained Earnings", balanceCents: 500000 },
+      { code: "3100", name: "Current Net Profit (YTD)", balanceCents: 199000 }
+    ],
+    totalAssetsCents: 784000,
+    totalLiabilitiesCents: 85000,
+    totalEquityCents: 699000
   });
 
 export const getProfitLoss = () =>
   safeInvoke<any>("get_profit_loss", {}, {
-    revenues: [{ code: "4000", name: "Sales Revenue", balanceCents: 150000 }],
-    expenses: [{ code: "5000", name: "Cost of Goods Sold", balanceCents: 50000 }],
-    totalRevenueCents: 150000,
-    totalExpenseCents: 50000,
-    netIncomeCents: 100000
+    revenues: [{ code: "4000", name: "Sales Revenue", balanceCents: 220500 }],
+    expenses: [
+      { code: "5000", name: "Cost of Goods Sold", balanceCents: 87000 },
+      { code: "6100", name: "General Operations Expense", balanceCents: 3500 }
+    ],
+    totalRevenueCents: 220500,
+    totalExpenseCents: 90500,
+    netIncomeCents: 130000
   });
+
 
 // HR & Payroll
 export const getEmployees = () =>

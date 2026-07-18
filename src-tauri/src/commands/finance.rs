@@ -473,3 +473,167 @@ pub fn update_manual_journal_entry(
     tx.commit().map_err(|e| e.to_string())?;
     Ok(())
 }
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateAccountInput {
+    pub code: String,
+    pub name: String,
+    pub r#type: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountLedgerTransaction {
+    pub id: String,
+    pub journal_entry_id: String,
+    pub timestamp: String,
+    pub reference_type: String,
+    pub reference_id: String,
+    pub description: Option<String>,
+    pub debit_cents: i64,
+    pub credit_cents: i64,
+    pub running_balance_cents: i64,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountLedgerDetails {
+    pub account: Account,
+    pub total_debit_cents: i64,
+    pub total_credit_cents: i64,
+    pub current_balance_cents: i64,
+    pub transactions: Vec<AccountLedgerTransaction>,
+}
+
+#[tauri::command]
+pub fn create_account(
+    state: State<'_, DbState>,
+    input: CreateAccountInput,
+) -> Result<Account, String> {
+    let code = input.code.trim();
+    let name = input.name.trim();
+    let acct_type = input.r#type.trim();
+
+    if code.is_empty() || name.is_empty() {
+        return Err("Account code and name are required.".to_string());
+    }
+
+    let valid_types = ["Asset", "Liability", "Equity", "Revenue", "Expense"];
+    if !valid_types.contains(&acct_type) {
+        return Err("Invalid account type. Must be Asset, Liability, Equity, Revenue, or Expense.".to_string());
+    }
+
+    let conn = state.pool.get().map_err(|e| e.to_string())?;
+
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM accounts WHERE code = ?",
+            params![code],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    if count > 0 {
+        return Err(format!("Account with code '{}' already exists.", code));
+    }
+
+    conn.execute(
+        "INSERT INTO accounts (code, name, type) VALUES (?, ?, ?)",
+        params![code, name, acct_type],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(Account {
+        code: code.to_string(),
+        name: name.to_string(),
+        r#type: acct_type.to_string(),
+    })
+}
+
+#[tauri::command]
+pub fn get_account_ledger(
+    state: State<'_, DbState>,
+    code: String,
+) -> Result<AccountLedgerDetails, String> {
+    let conn = state.pool.get().map_err(|e| e.to_string())?;
+
+    let account: Account = conn
+        .query_row(
+            "SELECT code, name, type FROM accounts WHERE code = ?",
+            params![code],
+            |row| {
+                Ok(Account {
+                    code: row.get(0)?,
+                    name: row.get(1)?,
+                    r#type: row.get(2)?,
+                })
+            },
+        )
+        .map_err(|_| format!("Account code '{}' not found.", code))?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT ji.id, ji.journal_entry_id, je.timestamp, je.reference_type, je.reference_id, je.description, ji.debit_cents, ji.credit_cents
+             FROM journal_items ji
+             JOIN journal_entries je ON ji.journal_entry_id = je.id
+             WHERE ji.account_code = ?
+             ORDER BY je.timestamp ASC, ji.id ASC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map(params![code], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, Option<String>>(5)?,
+                row.get::<_, i64>(6)?,
+                row.get::<_, i64>(7)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+
+    let is_debit_normal = account.r#type == "Asset" || account.r#type == "Expense";
+    let mut running_balance: i64 = 0;
+    let mut total_debit: i64 = 0;
+    let mut total_credit: i64 = 0;
+    let mut transactions = Vec::new();
+
+    for r in rows {
+        let (id, je_id, ts, ref_type, ref_id, desc, debit, credit) = r.map_err(|e| e.to_string())?;
+
+        total_debit += debit;
+        total_credit += credit;
+
+        if is_debit_normal {
+            running_balance += debit - credit;
+        } else {
+            running_balance += credit - debit;
+        }
+
+        transactions.push(AccountLedgerTransaction {
+            id,
+            journal_entry_id: je_id,
+            timestamp: ts,
+            reference_type: ref_type,
+            reference_id: ref_id,
+            description: desc,
+            debit_cents: debit,
+            credit_cents: credit,
+            running_balance_cents: running_balance,
+        });
+    }
+
+    Ok(AccountLedgerDetails {
+        account,
+        total_debit_cents: total_debit,
+        total_credit_cents: total_credit,
+        current_balance_cents: running_balance,
+        transactions,
+    })
+}
+

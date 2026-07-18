@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/dialog";
 import {
   getAccounts,
+  createAccount,
+  getAccountLedger,
   getJournalEntries,
   createManualJournalEntry,
   updateManualJournalEntry,
@@ -22,6 +24,8 @@ import {
   getBalanceSheet,
   getProfitLoss,
   getSettings,
+  Account,
+  AccountLedgerDetails,
 } from "@/lib/ipc";
 import {
   BookOpen,
@@ -38,6 +42,13 @@ import {
   ArrowRight,
   TrendingDown,
   X,
+  Layers,
+  ListFilter,
+  FolderPlus,
+  ArrowUpRight,
+  ArrowDownRight,
+  Eye,
+  ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/components/layout/app-layout";
@@ -47,10 +58,24 @@ export default function FinancePage() {
   const { session } = useAuth();
   const role = session?.role || "Admin";
 
-  const [activeTab, setActiveTab] = useState<"sheets" | "journal">("sheets");
+  const [activeTab, setActiveTab] = useState<"sheets" | "coa" | "drilldown" | "journal">("sheets");
   const [activeSheet, setActiveSheet] = useState<"balance" | "pl">("balance");
+  const [selectedLedgerCode, setSelectedLedgerCode] = useState<string>("1010");
+  
+  // Modals
   const [journalModalOpen, setJournalModalOpen] = useState(false);
+  const [createAccountModalOpen, setCreateAccountModalOpen] = useState(false);
+  
+  // Filters & Search
   const [searchQuery, setSearchQuery] = useState("");
+  const [coaSearch, setCoaSearch] = useState("");
+  const [coaTypeFilter, setCoaTypeFilter] = useState<string>("All");
+  const [drillSearch, setDrillSearch] = useState("");
+
+  // Create Account Form States
+  const [newAcctCode, setNewAcctCode] = useState("");
+  const [newAcctName, setNewAcctName] = useState("");
+  const [newAcctType, setNewAcctType] = useState<"Asset" | "Liability" | "Equity" | "Revenue" | "Expense">("Asset");
 
   // Manual Journal Entry Form States
   const [entryRefType, setEntryRefType] = useState("Adjustment");
@@ -69,9 +94,16 @@ export default function FinancePage() {
   });
 
   const currency = dbSettings.find((s) => s.key === "currency")?.value || "USD";
+  
   const { data: accounts = [] } = useQuery({
     queryKey: ["accounts"],
     queryFn: getAccounts,
+  });
+
+  const { data: ledgerDetails = null, isLoading: loadingLedger } = useQuery({
+    queryKey: ["accountLedger", selectedLedgerCode],
+    queryFn: () => getAccountLedger(selectedLedgerCode),
+    enabled: !!selectedLedgerCode,
   });
 
   const { data: journalEntries = [], isLoading: loadingJournals } = useQuery({
@@ -97,7 +129,7 @@ export default function FinancePage() {
     });
   };
 
-  // Real-time double-entry balancing calculations
+  // Double-entry auto balance calculation
   const totalDebits = items.reduce((acc, it) => acc + (parseFloat(it.debit || "0") || 0), 0);
   const totalCredits = items.reduce((acc, it) => acc + (parseFloat(it.credit || "0") || 0), 0);
   const isBalanced = Math.abs(totalDebits - totalCredits) < 0.01;
@@ -109,12 +141,10 @@ export default function FinancePage() {
     const newItems = [...items];
     const lastIdx = newItems.length - 1;
     if (diff > 0) {
-      // Debits exceed credits: add difference to credit of last item
       const currentVal = parseFloat(newItems[lastIdx].credit || "0") || 0;
       newItems[lastIdx].credit = (currentVal + diff).toFixed(2);
       newItems[lastIdx].debit = "";
     } else {
-      // Credits exceed debits: add difference to debit of last item
       const currentVal = parseFloat(newItems[lastIdx].debit || "0") || 0;
       newItems[lastIdx].debit = (currentVal - diff).toFixed(2);
       newItems[lastIdx].credit = "";
@@ -123,10 +153,40 @@ export default function FinancePage() {
     toast.success("Ledger balanced automatically.");
   };
 
+  // Account Creation Mutation
+  const createAccountMutation = useMutation({
+    mutationFn: async () => {
+      if (!newAcctCode.trim() || !newAcctName.trim()) {
+        throw new Error("Account code and account name are required.");
+      }
+      return await createAccount({
+        code: newAcctCode.trim(),
+        name: newAcctName.trim(),
+        type: newAcctType,
+      });
+    },
+    onSuccess: (createdAcct) => {
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["balanceSheet"] });
+      queryClient.invalidateQueries({ queryKey: ["profitLoss"] });
+      queryClient.invalidateQueries({ queryKey: ["accountLedger", createdAcct.code] });
+
+      setCreateAccountModalOpen(false);
+      setSelectedLedgerCode(createdAcct.code);
+      setNewAcctCode("");
+      setNewAcctName("");
+      setNewAcctType("Asset");
+
+      toast.success(`Ledger account '${createdAcct.code} - ${createdAcct.name}' created successfully.`);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to create ledger account.");
+    },
+  });
+
   // Manual Journal Mutations
   const createJournalMutation = useMutation({
     mutationFn: async () => {
-      // Validate entries
       const preparedItems = items.map((it) => {
         const debitCents = Math.round(parseFloat(it.debit || "0") * 100);
         const creditCents = Math.round(parseFloat(it.credit || "0") * 100);
@@ -168,6 +228,7 @@ export default function FinancePage() {
       queryClient.invalidateQueries({ queryKey: ["journalEntries"] });
       queryClient.invalidateQueries({ queryKey: ["balanceSheet"] });
       queryClient.invalidateQueries({ queryKey: ["profitLoss"] });
+      queryClient.invalidateQueries({ queryKey: ["accountLedger"] });
       
       setJournalModalOpen(false);
       setEditingEntryId(null);
@@ -194,11 +255,20 @@ export default function FinancePage() {
       queryClient.invalidateQueries({ queryKey: ["journalEntries"] });
       queryClient.invalidateQueries({ queryKey: ["balanceSheet"] });
       queryClient.invalidateQueries({ queryKey: ["profitLoss"] });
+      queryClient.invalidateQueries({ queryKey: ["accountLedger"] });
       toast.success("Ledger journal entry deleted successfully.");
     },
     onError: (err: any) => {
       toast.error(err.message || "Failed to delete ledger entry.");
-    }
+    },
+  });
+
+  // Filtering CoA list
+  const filteredCoA = accounts.filter((a) => {
+    const q = coaSearch.toLowerCase();
+    const matchesQuery = a.code.toLowerCase().includes(q) || a.name.toLowerCase().includes(q);
+    const matchesType = coaTypeFilter === "All" || a.type === coaTypeFilter;
+    return matchesQuery && matchesType;
   });
 
   // Filtered Journals List
@@ -213,6 +283,50 @@ export default function FinancePage() {
     );
     return entryDescMatch || entryRefMatch || itemMatch;
   });
+
+  // Filtered Drilldown Transactions
+  const filteredDrilldownTx = (ledgerDetails?.transactions || []).filter((tx) => {
+    const q = drillSearch.toLowerCase();
+    return (
+      tx.referenceId.toLowerCase().includes(q) ||
+      tx.referenceType.toLowerCase().includes(q) ||
+      (tx.description && tx.description.toLowerCase().includes(q))
+    );
+  });
+
+  // Auto Code Suggestion Helper
+  const suggestCode = (type: string) => {
+    const prefixes: Record<string, string> = {
+      Asset: "10",
+      Liability: "20",
+      Equity: "30",
+      Revenue: "40",
+      Expense: "60",
+    };
+    const prefix = prefixes[type] || "10";
+    const existing = accounts.filter((a) => a.code.startsWith(prefix));
+    if (existing.length === 0) return `${prefix}10`;
+    const maxCode = Math.max(...existing.map((a) => parseInt(a.code, 10) || 0));
+    return (maxCode + 10).toString();
+  };
+
+  // Account Type Badge Helper
+  const getTypeBadge = (type: string) => {
+    switch (type) {
+      case "Asset":
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">Asset (Debit Normal)</span>;
+      case "Liability":
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">Liability (Credit Normal)</span>;
+      case "Equity":
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/10 text-purple-500 border border-purple-500/20">Equity (Credit Normal)</span>;
+      case "Revenue":
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-500 border border-blue-500/20">Revenue (Credit Normal)</span>;
+      case "Expense":
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20">Expense (Debit Normal)</span>;
+      default:
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-muted text-muted-foreground">{type}</span>;
+    }
+  };
 
   // Access checks
   if (role === "Cashier") {
@@ -229,17 +343,19 @@ export default function FinancePage() {
     );
   }
 
+  const selectedAccountObj = accounts.find((a) => a.code === selectedLedgerCode);
+
   return (
     <PageContainer
       title="Finance & General Ledger"
-      subtitle="Double-entry financial reporting, automated transactional logs, and balance statement audits."
+      subtitle="Chart of accounts management, ledger account drill-downs, double-entry financial reporting, and audit logs."
     >
       {/* Upper Navigation Tabs */}
-      <div className="flex items-center justify-between gap-4 mb-6 border-b border-border/80 pb-4">
-        <div className="flex items-center gap-1.5 bg-card p-1.5 rounded-xl border border-border max-w-xl shadow-xs">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6 border-b border-border/80 pb-4">
+        <div className="flex flex-wrap items-center gap-1.5 bg-card p-1.5 rounded-xl border border-border shadow-xs">
           <button
             onClick={() => setActiveTab("sheets")}
-            className={`px-4 py-2.5 text-xs font-bold rounded-lg transition-all duration-200 flex items-center justify-center gap-3 tracking-wider ${
+            className={`px-3.5 py-2 text-xs font-bold rounded-lg transition-all duration-200 flex items-center justify-center gap-2 tracking-wider ${
               activeTab === "sheets"
                 ? "bg-primary text-primary-foreground shadow-xs"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
@@ -248,65 +364,123 @@ export default function FinancePage() {
             <Scale className="w-4 h-4" />
             <span>Financial Statements</span>
           </button>
+
           <button
-            onClick={() => setActiveTab("journal")}
-            className={`px-4 py-2.5 text-xs font-bold rounded-lg transition-all duration-200 flex items-center justify-center gap-3 tracking-wider ${
-              activeTab === "journal"
+            onClick={() => setActiveTab("coa")}
+            className={`px-3.5 py-2 text-xs font-bold rounded-lg transition-all duration-200 flex items-center justify-center gap-2 tracking-wider ${
+              activeTab === "coa"
+                ? "bg-primary text-primary-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>Chart of Accounts</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("drilldown")}
+            className={`px-3.5 py-2 text-xs font-bold rounded-lg transition-all duration-200 flex items-center justify-center gap-2 tracking-wider ${
+              activeTab === "drilldown"
                 ? "bg-primary text-primary-foreground shadow-xs"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             }`}
           >
             <BookOpen className="w-4 h-4" />
-            <span>Journal Ledger</span>
+            <span>Account Ledger Drill-Down</span>
+            {selectedAccountObj && (
+              <span
+                className={`ml-1 px-2 py-0.5 rounded-md text-[10px] font-mono transition-colors ${
+                  activeTab === "drilldown"
+                    ? "bg-primary-foreground/20 text-primary-foreground"
+                    : "bg-muted text-foreground font-semibold border border-border/70"
+                }`}
+              >
+                {selectedAccountObj.code}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab("journal")}
+            className={`px-3.5 py-2 text-xs font-bold rounded-lg transition-all duration-200 flex items-center justify-center gap-2 tracking-wider ${
+              activeTab === "journal"
+                ? "bg-primary text-primary-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            }`}
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Journal Entries</span>
           </button>
         </div>
 
-        {activeTab === "journal" && role === "Admin" && (
-          <Button
-            onClick={() => {
-              setEditingEntryId(null);
-              setEntryRefType("Adjustment");
-              setEntryRefId("");
-              setEntryDesc("");
-              setItems([
-                { accountCode: "", debit: "", credit: "" },
-                { accountCode: "", debit: "", credit: "" },
-              ]);
-              setJournalModalOpen(true);
-            }}
-            className="flex items-center gap-2 text-xs h-9 bg-primary hover:bg-primary/90 text-primary-foreground"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Post Adjustment Entry</span>
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {role === "Admin" && (
+            <Button
+              onClick={() => {
+                setNewAcctCode(suggestCode("Asset"));
+                setNewAcctName("");
+                setNewAcctType("Asset");
+                setCreateAccountModalOpen(true);
+              }}
+              className="flex items-center gap-2 text-xs h-9 bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+            >
+              <FolderPlus className="w-4 h-4" />
+              <span>Create Ledger Account</span>
+            </Button>
+          )}
+
+          {activeTab === "journal" && role === "Admin" && (
+            <Button
+              onClick={() => {
+                setEditingEntryId(null);
+                setEntryRefType("Adjustment");
+                setEntryRefId("");
+                setEntryDesc("");
+                setItems([
+                  { accountCode: "", debit: "", credit: "" },
+                  { accountCode: "", debit: "", credit: "" },
+                ]);
+                setJournalModalOpen(true);
+              }}
+              className="flex items-center gap-2 text-xs h-9 bg-primary hover:bg-primary/90 text-primary-foreground font-bold"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Post Adjustment Entry</span>
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Financial Statements View */}
       {activeTab === "sheets" && (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-          {/* Sub Tab selection */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setActiveSheet("balance")}
-              className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${
-                activeSheet === "balance"
-                  ? "bg-card border-border text-foreground shadow-xs"
-                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-card/40"
-              }`}
-            >
-              Balance Sheet
-            </button>
-            <button
-              onClick={() => setActiveSheet("pl")}
-              className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${
-                activeSheet === "pl"
-                  ? "bg-card border-border text-foreground shadow-xs"
-                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-card/40"
-              }`}
-            >
-              Profit & Loss (P&L)
-            </button>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex gap-2">
+              <button
+                onClick={() => setActiveSheet("balance")}
+                className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${
+                  activeSheet === "balance"
+                    ? "bg-card border-border text-foreground shadow-xs"
+                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-card/40"
+                }`}
+              >
+                Balance Sheet
+              </button>
+              <button
+                onClick={() => setActiveSheet("pl")}
+                className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${
+                  activeSheet === "pl"
+                    ? "bg-card border-border text-foreground shadow-xs"
+                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-card/40"
+                }`}
+              >
+                Profit & Loss (P&L)
+              </button>
+            </div>
+
+            <p className="text-[11px] text-muted-foreground italic hidden sm:block">
+              💡 Tip: Click any account row below to drill down into its detailed transaction ledger!
+            </p>
           </div>
 
           {/* Balance Sheet Statements */}
@@ -325,9 +499,20 @@ export default function FinancePage() {
                         {loadingBalance ? (
                           <tr><td className="p-4 animate-pulse">Computing assets balance ledger...</td></tr>
                         ) : balanceSheet?.assets.map((acct: any) => (
-                          <tr key={acct.code} className="border-b border-border/40 hover:bg-muted/10 transition-all">
-                            <td className="py-3.5 px-4 font-mono text-[11px] text-muted-foreground w-20">{acct.code}</td>
-                            <td className="py-3.5 px-4 text-foreground font-semibold">{acct.name}</td>
+                          <tr
+                            key={acct.code}
+                            onClick={() => {
+                              setSelectedLedgerCode(acct.code);
+                              setActiveTab("drilldown");
+                            }}
+                            className="border-b border-border/40 hover:bg-primary/5 cursor-pointer transition-all group"
+                            title="Click to view detailed account ledger"
+                          >
+                            <td className="py-3.5 px-4 font-mono text-[11px] text-muted-foreground w-20 group-hover:text-primary font-bold">{acct.code}</td>
+                            <td className="py-3.5 px-4 text-foreground font-semibold flex items-center gap-2">
+                              <span>{acct.name}</span>
+                              <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 text-primary transition-opacity" />
+                            </td>
                             <td className="py-3.5 px-4 text-right font-mono font-bold text-foreground">{formatCents(acct.balanceCents)}</td>
                           </tr>
                         ))}
@@ -366,9 +551,20 @@ export default function FinancePage() {
                         ) : balanceSheet?.liabilities.length === 0 ? (
                           <tr><td className="p-4 text-muted-foreground italic text-center" colSpan={3}>No outstanding liability balances.</td></tr>
                         ) : balanceSheet?.liabilities.map((acct: any) => (
-                          <tr key={acct.code} className="border-b border-border/40 hover:bg-muted/10 transition-all">
-                            <td className="py-2.5 px-4 font-mono text-[11px] text-muted-foreground w-20">{acct.code}</td>
-                            <td className="py-2.5 px-4 text-foreground font-medium">{acct.name}</td>
+                          <tr
+                            key={acct.code}
+                            onClick={() => {
+                              setSelectedLedgerCode(acct.code);
+                              setActiveTab("drilldown");
+                            }}
+                            className="border-b border-border/40 hover:bg-primary/5 cursor-pointer transition-all group"
+                            title="Click to view detailed account ledger"
+                          >
+                            <td className="py-2.5 px-4 font-mono text-[11px] text-muted-foreground w-20 group-hover:text-primary font-bold">{acct.code}</td>
+                            <td className="py-2.5 px-4 text-foreground font-medium flex items-center gap-2">
+                              <span>{acct.name}</span>
+                              <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 text-primary transition-opacity" />
+                            </td>
                             <td className="py-2.5 px-4 text-right font-mono font-bold text-foreground">{formatCents(acct.balanceCents)}</td>
                           </tr>
                         ))}
@@ -394,9 +590,20 @@ export default function FinancePage() {
                         {loadingBalance ? (
                           <tr><td className="p-4 animate-pulse">Computing equity...</td></tr>
                         ) : balanceSheet?.equity.map((acct: any) => (
-                          <tr key={acct.code} className="border-b border-border/40 hover:bg-muted/10 transition-all">
-                            <td className="py-2.5 px-4 font-mono text-[11px] text-muted-foreground w-20">{acct.code}</td>
-                            <td className="py-2.5 px-4 text-foreground font-medium">{acct.name}</td>
+                          <tr
+                            key={acct.code}
+                            onClick={() => {
+                              setSelectedLedgerCode(acct.code);
+                              setActiveTab("drilldown");
+                            }}
+                            className="border-b border-border/40 hover:bg-primary/5 cursor-pointer transition-all group"
+                            title="Click to view detailed account ledger"
+                          >
+                            <td className="py-2.5 px-4 font-mono text-[11px] text-muted-foreground w-20 group-hover:text-primary font-bold">{acct.code}</td>
+                            <td className="py-2.5 px-4 text-foreground font-medium flex items-center gap-2">
+                              <span>{acct.name}</span>
+                              <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 text-primary transition-opacity" />
+                            </td>
                             <td className="py-2.5 px-4 text-right font-mono font-bold text-foreground">{formatCents(acct.balanceCents)}</td>
                           </tr>
                         ))}
@@ -421,7 +628,6 @@ export default function FinancePage() {
                   </CardContent>
                 </Card>
 
-                {/* Reconciliation indicator */}
                 {!loadingBalance && balanceSheet && (
                   <div className={`p-4 rounded-xl flex items-center gap-3 border ${
                     balanceSheet.totalAssetsCents === (balanceSheet.totalLiabilitiesCents + balanceSheet.totalEquityCents)
@@ -459,7 +665,6 @@ export default function FinancePage() {
 
               <Card className="bg-card border border-border shadow-xs overflow-hidden rounded-xl">
                 <CardContent className="p-0">
-                  {/* Revenue section */}
                   <table className="w-full text-xs text-left">
                     <thead className="bg-muted text-muted-foreground uppercase text-[9px] tracking-wider border-b border-border">
                       <tr>
@@ -473,9 +678,20 @@ export default function FinancePage() {
                       ) : profitLoss?.revenues.length === 0 ? (
                         <tr><td className="p-3 text-muted-foreground italic text-center" colSpan={3}>No revenues recorded.</td></tr>
                       ) : profitLoss?.revenues.map((acct: any) => (
-                        <tr key={acct.code} className="border-b border-border/40 hover:bg-muted/10 transition-all">
-                          <td className="py-2.5 px-4 font-mono text-muted-foreground w-20">{acct.code}</td>
-                          <td className="py-2.5 px-4 text-foreground font-medium">{acct.name}</td>
+                        <tr
+                          key={acct.code}
+                          onClick={() => {
+                            setSelectedLedgerCode(acct.code);
+                            setActiveTab("drilldown");
+                          }}
+                          className="border-b border-border/40 hover:bg-primary/5 cursor-pointer transition-all group"
+                          title="Click to view detailed account ledger"
+                        >
+                          <td className="py-2.5 px-4 font-mono text-muted-foreground w-20 group-hover:text-primary font-bold">{acct.code}</td>
+                          <td className="py-2.5 px-4 text-foreground font-medium flex items-center gap-2">
+                            <span>{acct.name}</span>
+                            <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 text-primary transition-opacity" />
+                          </td>
                           <td className="py-2.5 px-4 text-right font-mono font-semibold text-foreground">{formatCents(acct.balanceCents)}</td>
                         </tr>
                       ))}
@@ -490,7 +706,6 @@ export default function FinancePage() {
                     </tbody>
                   </table>
 
-                  {/* Expenses section */}
                   <table className="w-full text-xs text-left">
                     <thead className="bg-muted text-muted-foreground uppercase text-[9px] tracking-wider border-b border-border">
                       <tr>
@@ -504,9 +719,20 @@ export default function FinancePage() {
                       ) : profitLoss?.expenses.length === 0 ? (
                         <tr><td className="p-3 text-muted-foreground italic text-center" colSpan={3}>No expenses logged.</td></tr>
                       ) : profitLoss?.expenses.map((acct: any) => (
-                        <tr key={acct.code} className="border-b border-border/40 hover:bg-muted/10 transition-all">
-                          <td className="py-2.5 px-4 font-mono text-muted-foreground w-20">{acct.code}</td>
-                          <td className="py-2.5 px-4 text-foreground font-medium">{acct.name}</td>
+                        <tr
+                          key={acct.code}
+                          onClick={() => {
+                            setSelectedLedgerCode(acct.code);
+                            setActiveTab("drilldown");
+                          }}
+                          className="border-b border-border/40 hover:bg-primary/5 cursor-pointer transition-all group"
+                          title="Click to view detailed account ledger"
+                        >
+                          <td className="py-2.5 px-4 font-mono text-muted-foreground w-20 group-hover:text-primary font-bold">{acct.code}</td>
+                          <td className="py-2.5 px-4 text-foreground font-medium flex items-center gap-2">
+                            <span>{acct.name}</span>
+                            <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 text-primary transition-opacity" />
+                          </td>
                           <td className="py-2.5 px-4 text-right font-mono font-semibold text-foreground">{formatCents(acct.balanceCents)}</td>
                         </tr>
                       ))}
@@ -521,7 +747,6 @@ export default function FinancePage() {
                     </tbody>
                   </table>
 
-                  {/* Net income total */}
                   <div className="bg-muted/80 p-4 flex items-center justify-between font-bold border-t border-border">
                     <span className="text-xs text-foreground uppercase tracking-wider font-extrabold">Net Income / Earnings</span>
                     <span className={`font-mono text-base font-black ${
@@ -534,6 +759,252 @@ export default function FinancePage() {
               </Card>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Chart of Accounts Tab */}
+      {activeTab === "coa" && (
+        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs">
+            <div className="flex items-center gap-2 bg-background border border-border px-3 py-1.5 rounded-lg max-w-sm flex-1">
+              <Search className="w-4 h-4 text-muted-foreground" />
+              <input
+                type="text"
+                value={coaSearch}
+                onChange={(e) => setCoaSearch(e.target.value)}
+                placeholder="Search Chart of Accounts by code or name..."
+                className="w-full bg-transparent border-none text-xs text-foreground focus:outline-hidden"
+              />
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto">
+              {["All", "Asset", "Liability", "Equity", "Revenue", "Expense"].map((type) => (
+                <button
+                  key={type}
+                  onClick={() => setCoaTypeFilter(type)}
+                  className={`px-3 py-1 text-xs font-bold rounded-lg border transition-all ${
+                    coaTypeFilter === type
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background border-border text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                  }`}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <Card className="bg-card border border-border overflow-hidden rounded-xl shadow-xs">
+            <CardContent className="p-0">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-muted text-muted-foreground uppercase text-[10px] tracking-wider border-b border-border">
+                  <tr>
+                    <th className="py-3 px-4 w-28">Code</th>
+                    <th className="py-3 px-4">Account Name</th>
+                    <th className="py-3 px-4">Account Classification</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/40">
+                  {filteredCoA.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="p-8 text-center text-muted-foreground italic">
+                        No ledger accounts match search query.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredCoA.map((acct) => (
+                      <tr key={acct.code} className="hover:bg-muted/20 transition-colors">
+                        <td className="py-3 px-4 font-mono font-bold text-foreground text-xs">{acct.code}</td>
+                        <td className="py-3 px-4 font-semibold text-foreground">{acct.name}</td>
+                        <td className="py-3 px-4">{getTypeBadge(acct.type)}</td>
+                        <td className="py-3 px-4 text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedLedgerCode(acct.code);
+                              setActiveTab("drilldown");
+                            }}
+                            className="h-7 text-[11px] font-bold border-border bg-background hover:bg-primary hover:text-primary-foreground transition-all flex items-center gap-1.5 ml-auto"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Drill-Down Ledger</span>
+                          </Button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Detailed Account Ledger Drill-Down Tab */}
+      {activeTab === "drilldown" && (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          {/* Account Selector Bar */}
+          <div className="bg-card border border-border p-4 rounded-xl shadow-xs flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-primary/10 text-primary rounded-xl">
+                <BookOpen className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Active Account Ledger</span>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={selectedLedgerCode}
+                    onChange={(e) => setSelectedLedgerCode(e.target.value)}
+                    className="text-sm font-black text-foreground bg-background border border-border rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-primary focus:outline-hidden"
+                  >
+                    {accounts.map((a) => (
+                      <option key={a.code} value={a.code}>
+                        {a.code} - {a.name} ({a.type})
+                      </option>
+                    ))}
+                  </select>
+                  {ledgerDetails && getTypeBadge(ledgerDetails.account.type)}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 bg-background border border-border px-3 py-1.5 rounded-lg max-w-xs w-full sm:w-auto">
+              <Search className="w-4 h-4 text-muted-foreground" />
+              <input
+                type="text"
+                value={drillSearch}
+                onChange={(e) => setDrillSearch(e.target.value)}
+                placeholder="Search ledger entries..."
+                className="w-full bg-transparent border-none text-xs text-foreground focus:outline-hidden"
+              />
+            </div>
+          </div>
+
+          {/* Stat Summary Cards */}
+          {loadingLedger ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {[1, 2, 3].map((i) => (
+                <Card key={i} className="h-24 bg-card border border-border animate-pulse" />
+              ))}
+            </div>
+          ) : ledgerDetails ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Card className="bg-card border border-border shadow-xs">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Current Ledger Balance</span>
+                    <h3 className="text-xl font-black text-foreground font-mono mt-0.5">
+                      {formatCents(ledgerDetails.currentBalanceCents)}
+                    </h3>
+                  </div>
+                  <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
+                    <Scale className="w-5 h-5" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-card border border-border shadow-xs">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Total Cumulative Debits</span>
+                    <h3 className="text-xl font-black text-foreground font-mono mt-0.5">
+                      {formatCents(ledgerDetails.totalDebitCents)}
+                    </h3>
+                  </div>
+                  <div className="p-3 bg-blue-500/10 text-blue-500 rounded-xl">
+                    <ArrowUpRight className="w-5 h-5" />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-card border border-border shadow-xs">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Total Cumulative Credits</span>
+                    <h3 className="text-xl font-black text-foreground font-mono mt-0.5">
+                      {formatCents(ledgerDetails.totalCreditCents)}
+                    </h3>
+                  </div>
+                  <div className="p-3 bg-purple-500/10 text-purple-500 rounded-xl">
+                    <ArrowDownRight className="w-5 h-5" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : null}
+
+          {/* Detailed Ledger Transactions Table */}
+          <Card className="bg-card border border-border overflow-hidden rounded-xl shadow-xs">
+            <CardHeader className="py-3 px-4 bg-muted/30 border-b border-border flex flex-row items-center justify-between">
+              <CardTitle className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+                <span>Detailed Transaction History</span>
+                <span className="text-muted-foreground font-mono text-[11px] font-normal">
+                  ({filteredDrilldownTx.length} items logged)
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-muted/60 text-muted-foreground uppercase text-[10px] tracking-wider border-b border-border">
+                  <tr>
+                    <th className="py-3 px-4">Date & Time</th>
+                    <th className="py-3 px-4">Reference Voucher</th>
+                    <th className="py-3 px-4">Description / Memo</th>
+                    <th className="py-3 px-4 text-right">Debit</th>
+                    <th className="py-3 px-4 text-right">Credit</th>
+                    <th className="py-3 px-4 text-right">Running Balance</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/40">
+                  {loadingLedger ? (
+                    <tr><td colSpan={6} className="p-6 text-center animate-pulse">Loading detailed ledger drill-down...</td></tr>
+                  ) : filteredDrilldownTx.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-muted-foreground italic">
+                        No transactions recorded for account {selectedLedgerCode} - {selectedAccountObj?.name || "Selected Account"}.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredDrilldownTx.map((tx) => (
+                      <tr key={tx.id} className="hover:bg-muted/15 transition-colors">
+                        <td className="py-3 px-4 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
+                          {new Date(tx.timestamp).toLocaleString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-foreground">{tx.referenceType}</span>
+                            <span className="font-mono text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded border border-border">
+                              {tx.referenceId}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-foreground font-medium">
+                          {tx.description || <span className="text-muted-foreground italic">No memo</span>}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-bold text-emerald-500">
+                          {tx.debitCents > 0 ? formatCents(tx.debitCents) : "-"}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-bold text-rose-450">
+                          {tx.creditCents > 0 ? formatCents(tx.creditCents) : "-"}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-black text-foreground bg-muted/20">
+                          {formatCents(tx.runningBalanceCents)}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -647,6 +1118,84 @@ export default function FinancePage() {
         </div>
       )}
 
+      {/* Create Account Modal Dialog */}
+      <Dialog open={createAccountModalOpen} onOpenChange={setCreateAccountModalOpen}>
+        <DialogContent className="bg-card border border-border max-w-md rounded-xl">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-bold text-foreground flex items-center gap-2">
+              <FolderPlus className="w-4 h-4 text-emerald-500" />
+              <span>Create New Ledger Account</span>
+            </DialogTitle>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              createAccountMutation.mutate();
+            }}
+            className="space-y-4 pt-2 text-xs"
+          >
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">Account Type (Classification)</Label>
+              <select
+                className="flex h-9 w-full rounded-md border border-border bg-background px-3 py-1 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-hidden"
+                value={newAcctType}
+                onChange={(e) => {
+                  const selectedType = e.target.value as any;
+                  setNewAcctType(selectedType);
+                  setNewAcctCode(suggestCode(selectedType));
+                }}
+              >
+                <option value="Asset">Asset (Debit Normal - Cash, Bank, Inventory)</option>
+                <option value="Liability">Liability (Credit Normal - Accounts Payable, Loans)</option>
+                <option value="Equity">Equity (Credit Normal - Owner's Equity, Capital)</option>
+                <option value="Revenue">Revenue (Credit Normal - Sales, Service Income)</option>
+                <option value="Expense">Expense (Debit Normal - Rent, Salaries, Utilities)</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">Account Code (Unique Numeric ID)</Label>
+              <Input
+                value={newAcctCode}
+                onChange={(e) => setNewAcctCode(e.target.value)}
+                placeholder="e.g. 1030 or 6200"
+                className="h-9 text-xs bg-background border-border font-mono"
+                required
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">Account Name</Label>
+              <Input
+                value={newAcctName}
+                onChange={(e) => setNewAcctName(e.target.value)}
+                placeholder="e.g. Petty Cash, Rent Expense, Consulting Revenue"
+                className="h-9 text-xs bg-background border-border"
+                required
+              />
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCreateAccountModalOpen(false)}
+                className="h-9 text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="h-9 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                disabled={createAccountMutation.isPending}
+              >
+                Create Account
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Manual Entry dialog modal */}
       <Dialog open={journalModalOpen} onOpenChange={setJournalModalOpen}>
         <DialogContent className="bg-card border border-border max-w-2xl rounded-xl">
@@ -696,7 +1245,6 @@ export default function FinancePage() {
               />
             </div>
 
-            {/* Premium Table Ledger Sheet */}
             <div className="space-y-3">
               <div className="flex items-center justify-between pb-1 border-b border-border">
                 <Label className="text-xs font-bold text-foreground">Transaction Entries (Ledger Sheet)</Label>
