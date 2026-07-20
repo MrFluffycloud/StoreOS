@@ -201,7 +201,7 @@ export interface SystemHealth {
 }
 
 export const getSystemHealth = () => safeInvoke<SystemHealth>("get_system_health", {}, {
-  app_version: "0.2.1",
+  app_version: "0.2.2",
   platform: "Web",
   arch: "wasm",
   db_size_bytes: 0,
@@ -284,10 +284,10 @@ export const getAppVersion = async (): Promise<string> => {
       return await getVersion();
     } catch (e) {
       console.error("Failed to get Tauri app version", e);
-      return "0.2.1";
+      return "0.2.2";
     }
   }
-  return "0.2.1";
+  return "0.2.2";
 };
 
 export const callGemini = (contentsJson: string, systemInstruction?: string) =>

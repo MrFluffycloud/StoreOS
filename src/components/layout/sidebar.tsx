@@ -51,7 +51,7 @@ export default function Sidebar() {
 
   const isPremium = dbSettings.find(s => s.key === "license_key")?.value ? true : false;
 
-  const { data: appVersion = "0.2.1" } = useQuery({
+  const { data: appVersion = "0.2.2" } = useQuery({
     queryKey: ["appVersion"],
     queryFn: getAppVersion,
   });
