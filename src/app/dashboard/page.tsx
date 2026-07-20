@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import PageContainer from "@/components/layout/page-container";
@@ -42,6 +42,10 @@ import {
   Download,
 } from "lucide-react";
 
+import { StoreOSAreaChart } from "@/components/charts/storeos-area-chart";
+import { StoreOSDonutChart } from "@/components/charts/storeos-donut-chart";
+import { StoreOSGaugeChart } from "@/components/charts/storeos-gauge-chart";
+
 export default function DashboardPage() {
   const queryClient = useQueryClient();
   const [isOnline, setIsOnline] = useState(true);
@@ -78,7 +82,6 @@ export default function DashboardPage() {
     runUpdateCheck(false);
   }, []);
 
-
   useEffect(() => {
     if (typeof window !== "undefined") {
       setIsOnline(navigator.onLine);
@@ -93,31 +96,41 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // Queries
+  // Queries with 30s caching & no background window focus refetching for maximum performance
   const { data: products = [], isLoading: loadingProducts } = useQuery({
     queryKey: ["products"],
     queryFn: getProducts,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: movements = [], isLoading: loadingMovements } = useQuery({
     queryKey: ["movements"],
     queryFn: listInventoryMovements,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: summary = [], isLoading: loadingSummary } = useQuery({
     queryKey: ["inventorySummary"],
     queryFn: getInventorySummary,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: dbSettings = [] } = useQuery({
     queryKey: ["settings"],
     queryFn: getSettings,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: health } = useQuery({
     queryKey: ["systemHealth"],
     queryFn: getSystemHealth,
-    refetchInterval: 30000, // refresh every 30s
+    refetchInterval: 30000,
+    staleTime: 15000,
+    refetchOnWindowFocus: false,
   });
 
   const isLoading = loadingProducts || loadingMovements || loadingSummary;
@@ -137,50 +150,114 @@ export default function DashboardPage() {
     },
   });
 
-  // Calculate Metrics from database
-  const totalRevenueCents = movements
-    .filter((m) => m.movementType === "Sale")
-    .reduce((acc, m) => {
-      const prod = products.find((p) => p.id === m.productId);
-      if (prod) {
-        return acc + prod.priceCents * Math.abs(m.quantity);
+  // Fast O(1) Product Lookup Map
+  const productMap = React.useMemo(() => {
+    return new Map(products.map((p) => [p.id, p]));
+  }, [products]);
+
+  // Optimized Metrics calculation from database
+  const { totalRevenueCents, totalProfitCents, transactionCount } = React.useMemo(() => {
+    let rev = 0;
+    let prof = 0;
+    const txSet = new Set<string>();
+
+    for (let i = 0; i < movements.length; i++) {
+      const m = movements[i];
+      if (m.movementType === "Sale") {
+        if (m.referenceId) txSet.add(m.referenceId);
+        const prod = productMap.get(m.productId);
+        if (prod) {
+          const qty = Math.abs(m.quantity);
+          rev += prod.priceCents * qty;
+          prof += (prod.priceCents - prod.costCents) * qty;
+        }
       }
-      return acc;
-    }, 0);
+    }
+
+    return {
+      totalRevenueCents: rev,
+      totalProfitCents: prof,
+      transactionCount: txSet.size,
+    };
+  }, [movements, productMap]);
 
   const formattedRevenue = (totalRevenueCents / 100).toLocaleString("en-US", {
     style: "currency",
     currency: currency,
   });
 
-  // Net Profit
-  const totalProfitCents = movements
-    .filter((m) => m.movementType === "Sale")
-    .reduce((acc, m) => {
-      const prod = products.find((p) => p.id === m.productId);
-      if (prod) {
-        const margin = prod.priceCents - prod.costCents;
-        return acc + margin * Math.abs(m.quantity);
-      }
-      return acc;
-    }, 0);
-
   const formattedProfit = (totalProfitCents / 100).toLocaleString("en-US", {
     style: "currency",
     currency: currency,
   });
-
-  // Unique transaction checkouts count
-  const transactionCount = new Set(
-    movements.filter((m) => m.movementType === "Sale").map((m) => m.referenceId)
-  ).size;
 
   // Actual profit margin percentage calculation
   const marginPercentage = totalRevenueCents > 0 ? (totalProfitCents / totalRevenueCents) * 100 : 0;
 
   // Low stock is defined as < 25 items left
   const lowStockCount = summary.filter((s) => s.currentStock < 25).length;
+  const healthyStockCount = summary.filter((s) => s.currentStock >= 25).length;
   const totalSkuCount = products.length;
+  const stockHealthPct = totalSkuCount > 0 ? (healthyStockCount / totalSkuCount) * 100 : 100;
+
+  // Compute 7-day Sales Trend Area Chart Data
+  const chartSalesData = React.useMemo(() => {
+    const days: { [dateStr: string]: { revenue: number; salesCount: number } } = {};
+    const now = new Date();
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(now.getDate() - i);
+      const key = d.toISOString().split("T")[0];
+      days[key] = { revenue: 0, salesCount: 0 };
+    }
+
+    movements.forEach((m) => {
+      if (m.movementType === "Sale") {
+        const dateKey = new Date(m.timestamp).toISOString().split("T")[0];
+        if (days[dateKey] !== undefined) {
+          const prod = productMap.get(m.productId);
+          const price = prod ? prod.priceCents : 0;
+          days[dateKey].revenue += (price * Math.abs(m.quantity)) / 100;
+          days[dateKey].salesCount += Math.abs(m.quantity);
+        }
+      }
+    });
+
+    return Object.entries(days).map(([dateStr, val]) => {
+      const dateObj = new Date(dateStr);
+      const label = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      return {
+        date: label,
+        Revenue: val.revenue,
+        Units: val.salesCount,
+      };
+    });
+  }, [movements, productMap]);
+
+  // Compute Category Distribution Donut Chart Data
+  const categoryDonutData = React.useMemo(() => {
+    const categoryTotals: { [cat: string]: number } = {};
+    const palette = [
+      "hsl(var(--primary))",
+      "rgb(14, 165, 233)", // sky-500
+      "rgb(168, 85, 247)", // purple-500
+      "rgb(245, 158, 11)", // amber-500
+      "rgb(16, 185, 129)", // emerald-500
+      "rgb(236, 72, 153)", // pink-500
+    ];
+
+    products.forEach((p) => {
+      const cat = p.category || "General";
+      categoryTotals[cat] = (categoryTotals[cat] || 0) + (p.priceCents / 100);
+    });
+
+    return Object.entries(categoryTotals).map(([catName, val], idx) => ({
+      name: catName,
+      value: val,
+      color: palette[idx % palette.length],
+    }));
+  }, [products]);
 
   const formatLastSync = (timestamp: string) => {
     if (timestamp === "Never") return "Never";
@@ -472,6 +549,61 @@ export default function DashboardPage() {
           description="active catalog products"
           icon={<Package className="w-4 h-4 text-sky-500" />}
         />
+      </div>
+
+      {/* Visual Analytics & Data Visualizations (Bklit Charts) */}
+      <div className="grid gap-8 md:grid-cols-12 mt-8 select-none">
+        {/* Sales Trend Area Chart */}
+        <Card className="md:col-span-8 border border-border/70 bg-card shadow-sm">
+          <CardHeader className="pb-3 px-6 pt-5 border-b border-border/60 flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
+                <TrendingUp className="w-4.5 h-4.5 text-primary" /> Sales & Revenue Velocity
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5 font-medium">
+                Daily POS revenue trends over the past 7 days
+              </p>
+            </div>
+            <span className="text-[11px] font-mono font-bold px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
+              Live Feed
+            </span>
+          </CardHeader>
+          <CardContent className="p-6">
+            <StoreOSAreaChart
+              data={chartSalesData}
+              xKey="date"
+              series={[
+                { key: "Revenue", label: `Revenue (${currency})`, color: "rgb(99, 102, 241)" },
+              ]}
+              height={290}
+              formatYValue={(val) =>
+                val.toLocaleString("en-US", { style: "currency", currency, maximumFractionDigits: 0 })
+              }
+            />
+          </CardContent>
+        </Card>
+
+        {/* Stock Health Gauge & Category Donut */}
+        <div className="md:col-span-4 grid gap-6">
+          <Card className="border border-border/70 bg-card shadow-sm">
+            <CardHeader className="pb-3 px-6 pt-5 border-b border-border/60">
+              <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                <Package className="w-4 h-4 text-emerald-500" /> Catalog Category Split
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              <StoreOSDonutChart
+                data={categoryDonutData}
+                centerLabel="Total Value"
+                centerValue={products.reduce((acc, p) => acc + p.priceCents / 100, 0).toLocaleString("en-US", { style: "currency", currency, maximumFractionDigits: 0 })}
+                height={180}
+                formatValue={(val) =>
+                  val.toLocaleString("en-US", { style: "currency", currency, maximumFractionDigits: 0 })
+                }
+              />
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* Main Grid: Recent Activity, Smart Alerts and Diagnostics */}

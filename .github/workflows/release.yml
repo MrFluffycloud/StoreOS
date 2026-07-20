@@ -39,9 +39,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
-          tagName: v__VERSION__ # tauri-action replaces this with version from tauri.conf.json
           releaseName: "StoreOS v__VERSION__"
-          releaseBody: "Automated StoreOS release."
+          releaseBody: ${{ github.event.head_commit.message }}
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

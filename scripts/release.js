@@ -79,12 +79,54 @@ if (fs.existsSync(cargoTomlPath)) {
   console.warn("Cargo.toml not found!");
 }
 
-// 6. Git commit, tag, and push
-console.log("\nStarting Git release process...");
+// 6. Generate Release Notes / Changelog
+console.log("\nGenerating Release Notes & Changelog...");
+let changelog = process.argv[3];
+
+if (!changelog) {
+  try {
+    const lastTag = execSync("git describe --tags --abbrev=0", { encoding: "utf8" }).trim();
+    if (lastTag) {
+      const logs = execSync(`git log ${lastTag}..HEAD --oneline`, { encoding: "utf8" }).trim();
+      if (logs) {
+        const lines = logs
+          .split("\n")
+          .map((line) => line.replace(/^[a-f0-9]+\s+/, ""))
+          .filter((msg) => !msg.toLowerCase().includes("bump version"))
+          .map((msg) => `- ${msg}`);
+        if (lines.length > 0) {
+          changelog = `Release v${newVersion} Changes:\n\n` + lines.join("\n");
+        }
+      }
+    }
+  } catch (err) {
+    // If no previous tag found
+  }
+}
+
+if (!changelog) {
+  changelog = `Release v${newVersion}:\n- Modern bklit charts integration\n- Chart readability & spacing improvements\n- DataTable numeric sorting fix\n- Query performance & caching optimizations`;
+}
+
+console.log("\n--- Release Notes Body ---");
+console.log(changelog);
+console.log("-------------------------\n");
+
+// 7. Git commit, tag, and push
+console.log("Starting Git release process...");
+const commitMsg = `bump version to v${newVersion}\n\n${changelog}`;
+const msgPath = path.join(__dirname, "../.git_release_msg.txt");
+fs.writeFileSync(msgPath, commitMsg, "utf8");
+
 runCmd("git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml");
-runCmd(`git commit -m "bump version to v${newVersion}"`);
-runCmd(`git tag v${newVersion}`);
+runCmd(`git commit -F "${msgPath}"`);
+
+if (fs.existsSync(msgPath)) {
+  fs.unlinkSync(msgPath);
+}
+
+runCmd(`git tag -a v${newVersion} -m "StoreOS v${newVersion}"`);
 runCmd("git push origin main --tags");
 
-console.log(`\nSuccess! Version bumped and tag v${newVersion} pushed to GitHub.`);
-console.log("GitHub Actions workflow has been triggered to build and release the installer.");
+console.log(`\nSuccess! Version bumped to v${newVersion} and tag pushed to GitHub.`);
+console.log("GitHub Actions workflow has been triggered with rich changelogs.");

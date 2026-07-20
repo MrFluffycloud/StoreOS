@@ -58,6 +58,14 @@ export function DataTable<T>({ columns, data, emptyMessage = "No records found."
       if (valB === null || valB === undefined) return -1;
 
       const factor = sortDirection === "asc" ? 1 : -1;
+
+      // Numerical comparison if both values are numbers or numeric strings
+      const numA = Number(valA);
+      const numB = Number(valB);
+      if (!isNaN(numA) && !isNaN(numB) && typeof valA !== "boolean" && typeof valB !== "boolean") {
+        return (numA - numB) * factor;
+      }
+
       if (typeof valA === "string" && typeof valB === "string") {
         return valA.localeCompare(valB) * factor;
       }

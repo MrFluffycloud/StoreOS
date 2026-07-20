@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import PageContainer from "@/components/layout/page-container";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,23 +18,12 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/components/layout/app-layout";
 import { useAlerts } from "@/components/providers/alert-provider";
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart";
+import { StoreOSAreaChart } from "@/components/charts/storeos-area-chart";
+import { StoreOSBarChart } from "@/components/charts/storeos-bar-chart";
+import { StoreOSDonutChart } from "@/components/charts/storeos-donut-chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Calendar as DateCalendar } from "@/components/ui/calendar";
-
-const chartConfig = {
-  sales: {
-    label: "Sales",
-    color: "var(--primary)",
-  },
-} satisfies ChartConfig;
 
 type DateRange = "today" | "7days" | "30days" | "all" | "custom";
 
@@ -63,6 +52,8 @@ export default function ReportsPage() {
   const { data: dbSettings = [] } = useQuery({
     queryKey: ["settings"],
     queryFn: getSettings,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
   });
 
   const currency = dbSettings.find((s) => s.key === "currency")?.value || "USD";
@@ -70,11 +61,15 @@ export default function ReportsPage() {
   const { data: products = [], isLoading: productsLoading } = useQuery({
     queryKey: ["products"],
     queryFn: getProducts,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: movements = [], isLoading: movementsLoading } = useQuery({
     queryKey: ["movements"],
     queryFn: listInventoryMovements,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
   });
 
   // Access check
@@ -660,58 +655,84 @@ export default function ReportsPage() {
               </Card>
             </div>
 
-            {/* Daily Sales Bar Chart */}
-            <Card className="bg-card border-border shadow-sm">
-              <CardHeader className="p-4 border-b border-border/60">
-                <CardTitle className="text-xs font-bold uppercase tracking-wider text-foreground">Sales Trend</CardTitle>
+            {/* Sales Trend Bklit Area Chart */}
+            <Card className="bg-card border border-border/70 shadow-sm">
+              <CardHeader className="p-6 border-b border-border/60 flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-sm font-bold tracking-tight text-foreground flex items-center gap-2">
+                    <TrendingUp className="w-4.5 h-4.5 text-primary" /> Sales Velocity Trend
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground font-medium mt-0.5">
+                    Gross checkout revenue breakdown across selected timeframe
+                  </p>
+                </div>
               </CardHeader>
               <CardContent className="p-6">
-                <div className="h-44 w-full">
-                  <ChartContainer config={chartConfig} className="h-full w-full">
-                    <BarChart
-                      data={chartData}
-                      margin={{ top: 10, right: 0, left: -10, bottom: 0 }}
-                    >
-                      <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-border/40" />
-                      <XAxis
-                        dataKey="date"
-                        tickLine={false}
-                        tickMargin={8}
-                        axisLine={false}
-                        className="text-[9px] font-mono font-medium fill-muted-foreground"
-                      />
-                      <YAxis
-                        tickLine={false}
-                        axisLine={false}
-                        width={45}
-                        className="text-[9px] font-mono font-medium fill-muted-foreground"
-                        tickFormatter={(val) => formatPrice(val * 100).replace(".00", "")}
-                      />
-                      <ChartTooltip
-                        cursor={{ fill: "var(--muted)", opacity: 0.15 }}
-                        content={
-                          <ChartTooltipContent
-                            labelFormatter={(value) => `${value}`}
-                            formatter={(value) => [
-                              <span key="sales-value" className="font-mono font-bold text-foreground">
-                                {formatPrice(Math.round(Number(value) * 100))}
-                              </span>,
-                              <span key="sales-label" className="text-[10px] text-muted-foreground uppercase font-bold">Sales</span>
-                            ]}
-                          />
-                        }
-                      />
-                      <Bar
-                        dataKey="sales"
-                        fill="var(--color-sales)"
-                        radius={[4, 4, 0, 0]}
-                        maxBarSize={16}
-                      />
-                    </BarChart>
-                  </ChartContainer>
-                </div>
+                <StoreOSAreaChart
+                  data={chartData}
+                  xKey="date"
+                  series={[{ key: "sales", label: "Sales Revenue", color: "rgb(99, 102, 241)" }]}
+                  height={280}
+                  formatYValue={(val) => formatPrice(val * 100).replace(".00", "")}
+                />
               </CardContent>
             </Card>
+
+            {/* Bklit Charts Grid: Category Bar + Payment Donut */}
+            <div className="grid grid-cols-12 gap-8">
+              <Card className="col-span-8 bg-card border border-border/70 shadow-sm">
+                <CardHeader className="p-6 border-b border-border/60">
+                  <CardTitle className="text-xs font-bold uppercase tracking-wider text-foreground">
+                    Category Revenue vs. Profit
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <StoreOSBarChart
+                    data={categoryStats.slice(0, 6).map((c) => ({
+                      category: c.category,
+                      Revenue: c.revenue / 100,
+                      Profit: c.profit / 100,
+                    }))}
+                    xKey="category"
+                    series={[
+                      { key: "Revenue", label: `Revenue (${currency})`, color: "rgb(14, 165, 233)" },
+                      { key: "Profit", label: `Profit (${currency})`, color: "rgb(16, 185, 129)" },
+                    ]}
+                    height={260}
+                    formatYValue={(val) => formatPrice(val * 100).replace(".00", "")}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card className="col-span-4 bg-card border border-border/70 shadow-sm">
+                <CardHeader className="p-6 border-b border-border/60">
+                  <CardTitle className="text-xs font-bold uppercase tracking-wider text-foreground">
+                    Payment Method Split
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <StoreOSDonutChart
+                    data={paymentStats.map((p) => {
+                      const colors: Record<string, string> = {
+                        Cash: "rgb(16, 185, 129)",
+                        Card: "rgb(14, 165, 233)",
+                        UPI: "rgb(168, 85, 247)",
+                        "Split Cash/Card": "rgb(245, 158, 11)",
+                      };
+                      return {
+                        name: p.name,
+                        value: p.amount / 100,
+                        color: colors[p.name] || "rgb(99, 102, 241)",
+                      };
+                    })}
+                    centerLabel="Total Sales"
+                    centerValue={formatPrice(totalSalesCents).replace(".00", "")}
+                    height={180}
+                    formatValue={(val) => formatPrice(val * 100)}
+                  />
+                </CardContent>
+              </Card>
+            </div>
 
             {/* Tables Grid */}
             <div className="grid grid-cols-3 gap-6">

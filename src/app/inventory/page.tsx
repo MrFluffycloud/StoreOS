@@ -7,10 +7,14 @@ import PageContainer from "@/components/layout/page-container";
 import { DataTable } from "@/components/ui/data-table";
 import { getInventorySummary, listInventoryMovements, getProducts } from "@/lib/ipc";
 import { AdjustmentDialog } from "@/components/features/inventory/adjustment-dialog";
+import React from "react";
 import { History, ClipboardList, RefreshCw, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StoreOSBarChart } from "@/components/charts/storeos-bar-chart";
+import { StoreOSGaugeChart } from "@/components/charts/storeos-gauge-chart";
 
 export default function InventoryPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -50,6 +54,8 @@ export default function InventoryPage() {
   const { data: products = [] } = useQuery({
     queryKey: ["products"],
     queryFn: getProducts,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
   });
 
   const {
@@ -59,6 +65,8 @@ export default function InventoryPage() {
   } = useQuery({
     queryKey: ["inventorySummary"],
     queryFn: getInventorySummary,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
   });
 
   const {
@@ -68,6 +76,8 @@ export default function InventoryPage() {
   } = useQuery({
     queryKey: ["movements"],
     queryFn: listInventoryMovements,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
   });
 
   const isLoading = loadingSummary || loadingMovements;
@@ -137,9 +147,9 @@ export default function InventoryPage() {
     },
     {
       header: "On Hand Stock",
-      sortValue: (s: any) => s.currentStock,
+      sortValue: (s: any) => Number(s.currentStock || 0),
       accessor: (s: any) => {
-        const isLow = s.currentStock < 25;
+        const isLow = Number(s.currentStock || 0) < 25;
         return (
           <span
             className={`font-mono text-xs font-semibold ${
@@ -154,9 +164,9 @@ export default function InventoryPage() {
     },
     {
       header: "Stock Status",
-      sortValue: (s: any) => s.currentStock,
+      sortValue: (s: any) => Number(s.currentStock || 0),
       accessor: (s: any) => {
-        const isLow = s.currentStock < 25;
+        const isLow = Number(s.currentStock || 0) < 25;
         return (
           <span
             className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold tracking-wide ${
@@ -265,6 +275,35 @@ export default function InventoryPage() {
     },
   ];
 
+  // Compute Stock Health % and Lowest Stock Items needing reorder
+  const lowStockThreshold = 20;
+  const lowStockItems = React.useMemo(() => {
+    return summary.filter((s: any) => s.currentStock < lowStockThreshold);
+  }, [summary]);
+
+  const stockHealthPct = React.useMemo(() => {
+    if (summary.length === 0) return 100;
+    const healthyCount = summary.filter((s: any) => s.currentStock >= lowStockThreshold).length;
+    return (healthyCount / summary.length) * 100;
+  }, [summary]);
+
+  // Total On-Hand Stock Units aggregated by Category
+  const categoryStockData = React.useMemo(() => {
+    if (summary.length === 0) return [];
+    const catMap: { [cat: string]: number } = {};
+    summary.forEach((s: any) => {
+      const prod = products.find((p: any) => p.id === s.productId);
+      const cat = prod?.category || "General";
+      catMap[cat] = (catMap[cat] || 0) + Number(s.currentStock || 0);
+    });
+    return Object.entries(catMap)
+      .map(([catName, units]) => ({
+        name: catName,
+        Units: units,
+      }))
+      .sort((a, b) => b.Units - a.Units);
+  }, [summary, products]);
+
   return (
     <PageContainer
       title="Inventory Control"
@@ -292,6 +331,48 @@ export default function InventoryPage() {
         </div>
       }
     >
+      {/* Bklit Inventory Insights & Category Breakdown */}
+      {!isLoading && (
+        <div className="grid grid-cols-12 gap-8 mb-8 select-none">
+          <Card className="col-span-8 bg-card border border-border/70 shadow-sm">
+            <CardHeader className="p-6 border-b border-border/60 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+                  <ClipboardList className="w-4 h-4 text-primary" /> On-Hand Stock Units by Category
+                </CardTitle>
+                <p className="text-xs text-muted-foreground font-medium mt-0.5">
+                  Total physical units currently stored across catalog categories
+                </p>
+              </div>
+              <span className="text-[11px] font-mono font-bold px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
+                {summary.reduce((acc: number, s: any) => acc + Number(s.currentStock || 0), 0)} Total Units
+              </span>
+            </CardHeader>
+            <CardContent className="p-6">
+              <StoreOSBarChart
+                data={categoryStockData}
+                xKey="name"
+                series={[
+                  { key: "Units", label: "Stock Units On Hand", color: "rgb(99, 102, 241)" },
+                ]}
+                height={220}
+                formatYValue={(val) => `${val} units`}
+              />
+            </CardContent>
+          </Card>
+
+          <Card className="col-span-4 bg-card border border-border/70 shadow-sm flex flex-col justify-center">
+            <CardContent className="p-6">
+              <StoreOSGaugeChart
+                value={stockHealthPct}
+                title="Store Inventory Health"
+                subtitle={`${lowStockItems.length} items below safety limit (${lowStockThreshold} units)`}
+                height={190}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      )}
       {isLoading ? (
         <div className="space-y-8 select-none">
           {/* Section 1: Stock Levels Skeleton */}
