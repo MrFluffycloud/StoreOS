@@ -1,3 +1,0 @@
-bump version to v0.2.4
-
-StoreOS v0.2.4 Pre-Launch Security & Quality Release: - Security & Auth: Added bcrypt PIN hashing and verification in Rust backend with automatic legacy PIN migration. - UI & Privacy: Masked PIN fields in user endpoints and account settings UI. - AI Advisor: Streamlined AI Advisor UI, removed mandatory API key inputs, added 30s timeout and network error handling. - Testing Suite: Added Vitest unit test framework with tests for double-entry bookkeeping ledgers and POS cart calculations. Added Rust unit tests.
