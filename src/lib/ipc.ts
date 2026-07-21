@@ -294,7 +294,7 @@ export const callGemini = (contentsJson: string, systemInstruction?: string) =>
   safeInvoke<string>(
     "call_gemini",
     { contentsJson, systemInstruction },
-    "Mocked Gemini response: Database context analyzed. Please configure your Gemini API Key in Settings and launch the Tauri app to interact with the real Gemini model."
+    "Mocked AI Advisor response: Database context analyzed. Launch the Tauri app to interact with the real AI Advisor model."
   );
 
 export const listAiModels = () =>

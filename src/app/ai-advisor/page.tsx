@@ -161,7 +161,7 @@ export default function AIAdvisorPage() {
       await refetchSettings();
       queryClient.invalidateQueries({ queryKey: ["settings"] });
       toast.success("AI Configuration Activated", {
-        description: "Your Gemini API Key has been saved locally.",
+        description: "Your AI settings have been updated.",
       });
       setApiKeyInput("");
     } catch (err: any) {
