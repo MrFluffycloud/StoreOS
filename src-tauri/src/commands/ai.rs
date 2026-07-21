@@ -88,8 +88,11 @@ pub async fn call_gemini(
 
     println!("GPT4Free API payload: {:#?}", payload);
 
-    // 3. Make POST request to g4f.space completions API
-    let client = reqwest::Client::new();
+    // 3. Make POST request to g4f.space completions API with timeout
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
     let url = "https://g4f.space/v1/chat/completions";
 
     let mut response = client
@@ -97,12 +100,12 @@ pub async fn call_gemini(
         .json(&payload)
         .send()
         .await
-        .map_err(|e| format!("HTTP request to GPT4Free failed: {}", e))?;
+        .map_err(|e| format!("AI Advisor service request failed (Network or Host Offline): {}", e))?;
 
     if !response.status().is_success() {
         let status = response.status();
         let err_text = response.text().await.unwrap_or_default();
-        return Err(format!("GPT4Free API error ({}): {}", status, err_text));
+        return Err(format!("AI Advisor service returned status {}: {}", status, err_text));
     }
 
     // 4. Stream response and emit chunks to frontend

@@ -1222,7 +1222,7 @@ export default function SettingsPage() {
             <Card className="border border-border bg-card shadow-sm">
               <CardHeader className="border-b border-border/55 pb-4">
                 <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-primary animate-pulse" /> GPT4Free AI Advisor Integration
+                  <Sparkles className="w-4 h-4 text-primary animate-pulse" /> AI Advisor Integration
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-6">
@@ -1242,7 +1242,7 @@ export default function SettingsPage() {
                       ))}
                     </select>
                     <p className="text-[10px] text-muted-foreground">
-                      Select the model to route your AI advisor requests through. GPT4Free processes requests completely free and securely without API keys.
+                      Select the AI model for business advice and insights. Processing completes automatically without requiring manual API keys.
                     </p>
                   </div>
 

@@ -508,7 +508,7 @@ ${JSON.stringify(context, null, 2)}`;
                 <Brain className="w-12 h-12 text-muted-foreground/45 mb-4 animate-bounce" />
                 <h4 className="text-sm font-bold text-foreground">No Insights Generated</h4>
                 <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-                  Click the **Refresh Insights** button above to feed your products, inventory levels, and sales totals into Gemini for a strategic business assessment.
+                  Click the **Refresh Insights** button above to feed your products, inventory levels, and sales totals into the AI Advisor for a strategic business assessment.
                 </p>
               </div>
             )}

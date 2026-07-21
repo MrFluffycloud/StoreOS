@@ -1,6 +1,6 @@
 {
   "name": "store-os-temp",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -12,7 +12,8 @@
     "tauri:build": "tauri build",
     "tauri:debug": "tauri build --debug",
     "tauri:icon": "tauri icon",
-    "release": "node scripts/release.js"
+    "release": "node scripts/release.js",
+    "test": "vitest run"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -57,6 +58,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.0.5"
   }
 }

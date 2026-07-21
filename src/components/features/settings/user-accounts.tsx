@@ -58,7 +58,7 @@ export default function UserAccountsManager() {
   const handleOpenEdit = (user: any) => {
     setEditingUser(user);
     setUsername(user.username);
-    setPin(user.pin);
+    setPin("****");
     setRole(user.role);
     setError(null);
     setDialogOpen(true);
@@ -109,14 +109,17 @@ export default function UserAccountsManager() {
       return;
     }
 
-    if (pin.length !== 4 || !/^\d+$/.test(pin)) {
-      setError("PIN must be exactly 4 digits.");
-      return;
-    }
-
     if (editingUser) {
-      updateMutation.mutate({ id: editingUser.id, username, pin, role });
+      if (pin !== "****" && pin.trim().length > 0 && (pin.length !== 4 || !/^\d+$/.test(pin))) {
+        setError("PIN must be exactly 4 digits.");
+        return;
+      }
+      updateMutation.mutate({ id: editingUser.id, username, pin: pin || "****", role });
     } else {
+      if (pin.length !== 4 || !/^\d+$/.test(pin)) {
+        setError("PIN must be exactly 4 digits.");
+        return;
+      }
       createMutation.mutate({ username, pin, role });
     }
   };
