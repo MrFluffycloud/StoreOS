@@ -1,0 +1,3 @@
+bump version to v0.2.5
+
+StoreOS v0.2.5 Production Release: - Complete branding cleanup for AI Advisor - Security hardening with bcrypt PIN hashing and verification - Added Vitest unit test suite for finance ledgers and POS cart calculations
