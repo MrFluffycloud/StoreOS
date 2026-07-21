@@ -1,0 +1,3 @@
+bump version to v0.2.6
+
+StoreOS v0.2.6 Release Upload Fix: Added explicit tagName parameter to tauri-action to publish release artifacts to GitHub Releases tab
