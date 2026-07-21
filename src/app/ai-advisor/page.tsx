@@ -422,11 +422,11 @@ ${JSON.stringify(context, null, 2)}`;
     "Help me negotiate a volume discount script for key suppliers.",
   ];
 
-  // Render main layout directly since GPT4Free is free and requires no key onboarding
+  // Render main layout directly
   return (
     <PageContainer
       title="AI Business Advisor"
-      subtitle="Strategic insights, stock analysis, and pricing audits powered by GPT4Free AI"
+      subtitle="Strategic insights, stock analysis, and pricing audits for your retail store"
     >
       <div className="space-y-6">
         {/* Navigation Tab Header */}

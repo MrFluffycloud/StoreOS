@@ -56,7 +56,7 @@ pub async fn call_gemini(
         }]
     };
 
-    // 2. Map Gemini payload structure to standard OpenAI format expected by GPT4Free
+    // 2. Map payload structure to standard OpenAI format
     let mut messages = Vec::new();
     if let Some(sys) = system_instruction {
         if !sys.trim().is_empty() {
@@ -85,8 +85,6 @@ pub async fn call_gemini(
         messages,
         stream: true, // Enable streaming
     };
-
-    println!("GPT4Free API payload: {:#?}", payload);
 
     // 3. Make POST request to g4f.space completions API with timeout
     let client = reqwest::Client::builder()

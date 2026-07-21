@@ -24,7 +24,7 @@ export default function SettingsPage() {
 
   const [activeTab, setActiveTab] = useState<"shop" | "users" | "receipt" | "sync" | "ai">("shop");
 
-  // GPT4Free AI settings states
+  // AI advisor settings states
   const [geminiModel, setGeminiModel] = useState("gpt-4.1");
   const [aiModels, setAiModels] = useState<string[]>(["gpt-4.1", "gpt-4.1-mini", "deepseek-v3"]);
 
